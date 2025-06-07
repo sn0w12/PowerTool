@@ -94,6 +94,45 @@ function Write-UsageSection {
     Write-Host "[options]" -ForegroundColor Gray
 }
 
+function Write-ColoredExample {
+    param([string]$ExampleText)
+
+    if (-not $ExampleText) { return }
+
+    # Split the example into parts
+    $parts = $ExampleText -split ' '
+
+    for ($i = 0; $i -lt $parts.Count; $i++) {
+        $part = $parts[$i]
+
+        if ($i -eq 0) {
+            # First part is usually "powertool" or "pt"
+            Write-Host $part -NoNewline -ForegroundColor Yellow
+        } elseif ($i -eq 1) {
+            # Second part is the command
+            Write-Host $part -NoNewline -ForegroundColor White
+        } elseif ($part.StartsWith('-')) {
+            # Options/flags
+            Write-Host $part -NoNewline -ForegroundColor Green
+        } elseif ($part.StartsWith('[') -and $part.EndsWith(']')) {
+            # Optional parameters
+            Write-Host $part -NoNewline -ForegroundColor DarkCyan
+        } elseif ($part.StartsWith('<') -and $part.EndsWith('>')) {
+            # Required parameters
+            Write-Host $part -NoNewline -ForegroundColor DarkYellow
+        } else {
+            # Regular arguments/values
+            Write-Host $part -NoNewline -ForegroundColor Gray
+        }
+
+        # Add space between parts (except for the last one)
+        if ($i -lt $parts.Count - 1) {
+            Write-Host " " -NoNewline
+        }
+    }
+    Write-Host "" # Newline at the end
+}
+
 function Show-Help {
     param(
         [string]$ForCommand,
@@ -140,7 +179,8 @@ function Show-Help {
             Write-Host "Examples:" -ForegroundColor Blue
             if ($foundCommandDetails.Examples -is [array]) {
                 foreach ($example in $foundCommandDetails.Examples) {
-                    Write-Host "  $example"
+                    Write-Host "  " -NoNewline
+                    Write-ColoredExample -ExampleText $example
                 }
             }
         } else {
@@ -241,4 +281,4 @@ $script:ModuleCommands = @{
     }
 }
 
-Export-ModuleMember -Function Show-Help, Write-ColoredOptions, Show-Version -Variable ModuleCommands
+Export-ModuleMember -Function Show-Help, Write-ColoredOptions, Write-ColoredExample, Show-Version -Variable ModuleCommands

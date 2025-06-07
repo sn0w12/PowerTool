@@ -256,6 +256,137 @@ function Show-Version {
     Write-Host " v$version"
 }
 
+function Search-Commands {
+    param(
+        [string]$SearchTerm,
+        [hashtable]$AllCommandData,
+        [hashtable]$CommandModuleMap = @{}
+    )
+
+    if (-not $SearchTerm -or $SearchTerm.Trim() -eq "") {
+        Write-Host "Please provide a search term." -ForegroundColor Red
+        return
+    }
+
+    if (-not $AllCommandData) {
+        Write-Error "Command data not provided to Search-Commands."
+        return
+    }
+
+    $searchTerm = $SearchTerm.ToLower()
+    $matchingCommands = @()
+
+    foreach ($commandName in $AllCommandData.Keys) {
+        $command = $AllCommandData[$commandName]
+        $relevanceScore = 0
+        $isMatch = $false
+
+        # Exact command name match (highest priority)
+        if ($commandName.ToLower() -eq $searchTerm) {
+            $relevanceScore += 100
+            $isMatch = $true
+        }
+        # Command name starts with search term
+        elseif ($commandName.ToLower().StartsWith($searchTerm)) {
+            $relevanceScore += 75
+            $isMatch = $true
+        }
+        # Command name contains search term
+        elseif ($commandName.ToLower().Contains($searchTerm)) {
+            $relevanceScore += 50
+            $isMatch = $true
+        }
+
+        # Exact alias match
+        if ($command.Aliases) {
+            foreach ($alias in $command.Aliases) {
+                if ($alias.ToLower() -eq $searchTerm) {
+                    $relevanceScore += 90
+                    $isMatch = $true
+                }
+                elseif ($alias.ToLower().StartsWith($searchTerm)) {
+                    $relevanceScore += 65
+                    $isMatch = $true
+                }
+                elseif ($alias.ToLower().Contains($searchTerm)) {
+                    $relevanceScore += 40
+                    $isMatch = $true
+                }
+            }
+        }
+
+        # Summary contains search term (word boundary preferred)
+        if ($command.Summary) {
+            $summaryLower = $command.Summary.ToLower()
+            if ($summaryLower -match "\b$([regex]::Escape($searchTerm))\b") {
+                $relevanceScore += 30
+                $isMatch = $true
+            }
+            elseif ($summaryLower.Contains($searchTerm)) {
+                $relevanceScore += 20
+                $isMatch = $true
+            }
+        }
+
+        # Options contains search term
+        if ($command.Options -and $command.Options.ToLower().Contains($searchTerm)) {
+            $relevanceScore += 10
+            $isMatch = $true
+        }
+
+        if ($isMatch) {
+            $matchingCommands += @{
+                Name = $commandName
+                Command = $command
+                Module = if ($CommandModuleMap.ContainsKey($commandName)) { $CommandModuleMap[$commandName] } else { "Unknown" }
+                RelevanceScore = $relevanceScore
+            }
+        }
+    }
+
+    Write-Header
+    Write-Host "Search Results for: " -NoNewline -ForegroundColor Blue
+    Write-Host "'$SearchTerm'" -ForegroundColor Yellow
+    Write-Host ""
+
+    if ($matchingCommands.Count -eq 0) {
+        Write-Host "No commands found matching '$SearchTerm'." -ForegroundColor Red
+        Write-Host "Use 'powertool help' to see all available commands." -ForegroundColor White
+        return
+    }
+
+    Write-Host "Found $($matchingCommands.Count) matching command(s):" -ForegroundColor Green
+    Write-Host ""
+
+    # Sort by relevance score (highest first), then by name
+    $sortedMatches = $matchingCommands | Sort-Object @{Expression={$_.RelevanceScore}; Descending=$true}, @{Expression={$_.Name}; Ascending=$true}
+
+    foreach ($match in $sortedMatches) {
+        $commandName = $match.Name
+        $command = $match.Command
+        $moduleName = $match.Module
+        $shortcutsText = if ($command.Aliases) { " (" + ($command.Aliases -join ', ') + ")" } else { "" }
+
+        Write-Host "  " -NoNewline
+        Write-Host $commandName -NoNewline -ForegroundColor Cyan
+        Write-Host $shortcutsText -NoNewline -ForegroundColor Yellow
+        Write-Host " [" -NoNewline -ForegroundColor DarkGray
+        Write-Host $moduleName -NoNewline -ForegroundColor Magenta
+        Write-Host "]" -NoNewline -ForegroundColor DarkGray
+
+        $paddingLength = 18 - ($commandName.Length + $shortcutsText.Length + $moduleName.Length + 3)
+        if ($paddingLength -gt 0) {
+            Write-Host (" " * $paddingLength) -NoNewline
+        } else {
+            Write-Host " " -NoNewline
+        }
+
+        Write-Host $command.Summary -ForegroundColor White
+        Write-Host "    Options: " -NoNewline -ForegroundColor White
+        Write-ColoredOptions -OptionsText $command.Options
+    }
+}
+
 $script:ModuleCommands = @{
     "help" = @{
         Aliases = @("h")
@@ -271,6 +402,19 @@ $script:ModuleCommands = @{
             "powertool help filter-images"
         )
     }
+    "search" = @{
+        Aliases = @("find", "f")
+        Action = {
+            Search-Commands -SearchTerm $Path -AllCommandData $script:commandDefinitions -CommandModuleMap $script:commandModuleMap
+        }
+        Summary = "Search through all available commands by name, aliases, or description."
+        Options = "[search-term]"
+        Examples = @(
+            "powertool search image",
+            "powertool find rename",
+            "pt f file"
+        )
+    }
     "version" = @{
         Aliases = @("v", "ver")
         Action = { Show-Version }
@@ -283,4 +427,4 @@ $script:ModuleCommands = @{
     }
 }
 
-Export-ModuleMember -Function Show-Help, Write-ColoredOptions, Write-ColoredExample, Show-Version -Variable ModuleCommands
+Export-ModuleMember -Function Show-Help, Write-ColoredOptions, Write-ColoredExample, Show-Version, Search-Commands -Variable ModuleCommands

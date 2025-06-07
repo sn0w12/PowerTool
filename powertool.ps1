@@ -8,7 +8,7 @@ param (
     [switch]$Version
 )
 
-Import-Module (Join-Path $PSScriptRoot "func/help.psm1") -Force
+Import-Module (Join-Path $PSScriptRoot "modules/help.psm1") -Force
 
 # Use current directory if no path provided for commands that need it
 if (-not $Path -and $Command.ToLower() -notin @("help", "h", "version", "v")) {

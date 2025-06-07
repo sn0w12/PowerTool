@@ -4,7 +4,8 @@ param (
     [int]$MinWidth = 0,
     [int]$MinHeight = 0,
     [int]$MinSize = 0,
-    [string]$Pattern
+    [string]$Pattern,
+    [switch]$Recursive
 )
 
 $script:version = "0.1.0"

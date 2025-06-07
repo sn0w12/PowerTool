@@ -73,26 +73,16 @@ $script:ModuleCommands = @{
         Aliases = @("rr")
         Action = {
             $targetPath = Get-TargetPath -Path $Path
-            Rename-FilesRandomly -dir $targetPath
+            $useRecursive = $PSBoundParameters.ContainsKey('Recursive') -and $Recursive
+            Rename-FilesRandomly -dir $targetPath -recursive $useRecursive
         }
         Summary = "Rename all files in a folder with random names."
-        Options = "[path]"
+        Options = "[path] -recursive"
         Examples = @(
             "powertool rename-random",
-            "powertool rr `"C:\MyFolder`""
-        )
-    }
-    "rename-random-recursive" = @{
-        Aliases = @("rrr")
-        Action = {
-            $targetPath = Get-TargetPath -Path $Path
-            Rename-FilesRandomly -dir $targetPath -recursive $true
-        }
-        Summary = "Rename all files recursively in subfolders with random names."
-        Options = "[path]"
-        Examples = @(
-            "powertool rename-random-recursive",
-            "powertool rrr `"C:\MyFolder`""
+            "powertool rr `"C:\MyFolder`"",
+            "powertool rename-random -recursive",
+            "powertool rr `"C:\MyFolder`" -recursive"
         )
     }
     "flatten" = @{

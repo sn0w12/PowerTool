@@ -1,6 +1,7 @@
 param (
     [Parameter(Mandatory=$false, Position=0)][string]$Command = "help",
     [Parameter(Position=1)][string]$Path,
+    [Parameter(Position=2)][string]$Value,
     [int]$MinWidth = 0,
     [int]$MinHeight = 0,
     [int]$MinSize = 0,
@@ -24,6 +25,7 @@ $script:commandDefinitions = @{}
 $script:commandModuleMap = @{}
 $script:extensions = @{}
 $script:extensionCommands = @{}
+$script:settings = $null
 
 foreach ($modulePathString in $modules) {
     # Use -PassThru to get the module object directly. -Force ensures it reloads.
@@ -31,6 +33,11 @@ foreach ($modulePathString in $modules) {
     $loadedModule = Import-Module (Join-Path $PSScriptRoot $modulePathString) -Force -PassThru -ErrorAction SilentlyContinue
 
     if ($loadedModule) {
+        # Initialize settings if this is the Settings module
+        if ($modulePathString -like "*Settings.psm1") {
+            $script:settings = & $loadedModule { Get-AllSettings }
+        }
+
         if ($loadedModule.ExportedVariables.ContainsKey('ModuleCommands')) {
             $moduleCommandsInfo = $loadedModule.ExportedVariables['ModuleCommands']
             # Get the actual value of the 'ModuleCommands' variable

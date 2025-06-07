@@ -68,101 +68,177 @@ function Write-ColoredOptions {
             Write-Host " | " -NoNewline -ForegroundColor DarkGray
         }
     }
+    Write-Host "" # Ensure a newline after options are printed
+}
+
+$script:HeaderText = "PowerTool - Utility CLI for Windows"
+
+function Write-UsageSection {
+    Write-Host "Usage:" -ForegroundColor Blue
+    Write-Host "  " -NoNewline
+    Write-Host "powertool" -NoNewline -ForegroundColor Yellow
+    Write-Host " " -NoNewline
+    Write-Host "<command>" -NoNewline -ForegroundColor White
+    Write-Host " " -NoNewline
+    Write-Host "[input]" -NoNewline -ForegroundColor DarkCyan
+    Write-Host " " -NoNewline
+    Write-Host "[options]" -ForegroundColor Gray
+
+    Write-Host "  " -NoNewline
+    Write-Host "pt" -NoNewline -ForegroundColor Yellow
+    Write-Host " " -NoNewline
+    Write-Host "<command>" -NoNewline -ForegroundColor White
+    Write-Host " " -NoNewline
+    Write-Host "[input]" -NoNewline -ForegroundColor DarkCyan
+    Write-Host " " -NoNewline
+    Write-Host "[options]" -ForegroundColor Gray
 }
 
 function Show-Help {
-    param([string]$ForCommand)
+    param(
+        [string]$ForCommand,
+        [hashtable]$AllCommandData, # Receives $commandDefinitions from powertool.ps1
+        [hashtable]$CommandModuleMap = @{} # Receives $commandModuleMap from powertool.ps1
+    )
 
-    $helpFilePath = Join-Path $PSScriptRoot "../help.json"
-
-    if (-not (Test-Path $helpFilePath)) {
-        Write-Error "Help file not found: $helpFilePath"
+    if (-not $AllCommandData) {
+        Write-Error "Command data not provided to Show-Help."
         return
     }
 
-    try {
-        $helpContent = Get-Content -Path $helpFilePath -Raw | ConvertFrom-Json
-    }
-    catch {
-        Write-Error "Error reading or parsing help file: $($_.Exception.Message)"
-        return
-    }
-
-    # --- Logic to Display Help ---
     if ($ForCommand) {
-        Write-Host $helpContent.preamble -ForegroundColor White
+        Write-Host $script:HeaderText -ForegroundColor Cyan
+        Write-Host ""
+        Write-UsageSection
         Write-Host ""
         $commandKey = $ForCommand.ToLower()
-
-        # Find command by name or shortcut
-        $foundCommand = $null
+        $foundCommandDetails = $null
         $foundCommandName = $null
-        foreach ($commandName in $helpContent.commands.PSObject.Properties.Name) {
-            $command = $helpContent.commands.$commandName
-            if ($commandName -eq $commandKey -or ($command.shortcuts -and $command.shortcuts -contains $commandKey)) {
-                $foundCommand = $command
-                $foundCommandName = $commandName
+
+        foreach ($cmdNameEntry in $AllCommandData.Keys) {
+            $commandEntry = $AllCommandData[$cmdNameEntry]
+            $currentAliases = @()
+            if ($commandEntry -is [hashtable] -and $commandEntry.ContainsKey('Aliases') -and $null -ne $commandEntry.Aliases) {
+                $currentAliases = $commandEntry.Aliases
+            }
+
+            if ($cmdNameEntry -eq $commandKey -or ($currentAliases -contains $commandKey)) {
+                $foundCommandDetails = $commandEntry
+                $foundCommandName = $cmdNameEntry
                 break
             }
         }
 
-        if ($foundCommand) {
-            $shortcutsText = if ($foundCommand.shortcuts) { " (" + ($foundCommand.shortcuts -join ', ') + ")" } else { "" }
+        if ($foundCommandDetails) {
+            $shortcutsText = if ($foundCommandDetails.Aliases) { " (" + ($foundCommandDetails.Aliases -join ', ') + ")" } else { "" }
             Write-Host "Command Details:" -ForegroundColor Blue
             Write-Host "  " -NoNewline
             Write-Host $foundCommandName -NoNewline -ForegroundColor Cyan
             Write-Host $shortcutsText -ForegroundColor Yellow
-            Write-Host "    $($foundCommand.summary)" -ForegroundColor White
+            Write-Host "    $($foundCommandDetails.Summary)" -ForegroundColor White
             Write-Host "    Options: " -NoNewline -ForegroundColor White
-            Write-ColoredOptions -OptionsText $foundCommand.options
-            Write-Host ""
+            Write-ColoredOptions -OptionsText $foundCommandDetails.Options
             Write-Host ""
             Write-Host "Examples:" -ForegroundColor Blue
-            foreach ($example in $foundCommand.examples) {
-                Write-Host "  $example"
+            if ($foundCommandDetails.Examples -is [array]) {
+                foreach ($example in $foundCommandDetails.Examples) {
+                    Write-Host "  $example"
+                }
             }
         } else {
             Write-Host "Unknown command: '$ForCommand'. Cannot show specific help." -ForegroundColor Red
             Write-Host "Use 'powertool help' to see all available commands." -ForegroundColor White
         }
     } else {
-        # Display full help
-        Write-Host $helpContent.preamble -ForegroundColor White
+        Write-Host $script:HeaderText -ForegroundColor Cyan
+        Write-Host ""
+        Write-UsageSection
         Write-Host ""
         Write-Host "Commands:" -ForegroundColor Blue
-        foreach ($commandName in $helpContent.commands.PSObject.Properties.Name) {
-            $command = $helpContent.commands.$commandName
-            $shortcutsText = if ($command.shortcuts) { " (" + ($command.shortcuts -join ', ') + ")" } else { "" }
-            Write-Host "  " -NoNewline
-            Write-Host $commandName -NoNewline -ForegroundColor Cyan
-            Write-Host $shortcutsText -NoNewline -ForegroundColor Yellow
-            $paddingLength = 25 - ($commandName.Length + $shortcutsText.Length)
-            if ($paddingLength -gt 0) {
-                Write-Host (" " * $paddingLength) -NoNewline
+
+        # Group commands by module
+        $moduleGroups = @{}
+        foreach ($commandName in $AllCommandData.Keys) {
+            $moduleName = if ($CommandModuleMap.ContainsKey($commandName)) {
+                $CommandModuleMap[$commandName]
             } else {
-                Write-Host " " -NoNewline
+                "Unknown"
             }
-            Write-Host $command.summary -ForegroundColor White
-            Write-Host "    Options: " -NoNewline -ForegroundColor White
-            Write-ColoredOptions -OptionsText $command.options
-            Write-Host ""
+
+            if (-not $moduleGroups.ContainsKey($moduleName)) {
+                $moduleGroups[$moduleName] = @()
+            }
+            $moduleGroups[$moduleName] += $commandName
+        }
+
+        # Define module display order (Help first, then others alphabetically)
+        $moduleOrder = @("Help") + ($moduleGroups.Keys | Where-Object { $_ -ne "Help" } | Sort-Object)
+
+        $isFirstModule = $true
+        foreach ($moduleName in $moduleOrder) {
+            if (-not $moduleGroups.ContainsKey($moduleName)) { continue }
+
+            # Add spacing between modules (except before the first one)
+            if (-not $isFirstModule) {
+                Write-Host ""
+            }
+            $isFirstModule = $false
+
+            # Display module header
+            Write-Host "  ${moduleName}:" -ForegroundColor Magenta
+
+            # Sort commands within each module
+            $sortedCommands = $moduleGroups[$moduleName] | Sort-Object
+
+            foreach ($commandNameKey in $sortedCommands) {
+                $command = $AllCommandData[$commandNameKey]
+                $shortcutsText = if ($command.Aliases) { " (" + ($command.Aliases -join ', ') + ")" } else { "" }
+                Write-Host "    " -NoNewline
+                Write-Host $commandNameKey -NoNewline -ForegroundColor Cyan
+                Write-Host $shortcutsText -NoNewline -ForegroundColor Yellow
+                $paddingLength = 23 - ($commandNameKey.Length + $shortcutsText.Length)
+                if ($paddingLength -gt 0) {
+                    Write-Host (" " * $paddingLength) -NoNewline
+                } else {
+                    Write-Host " " -NoNewline
+                }
+                Write-Host $command.Summary -ForegroundColor White
+                Write-Host "      Options: " -NoNewline -ForegroundColor White
+                Write-ColoredOptions -OptionsText $command.Options
+            }
         }
     }
 }
 
 function Show-Version {
-    $version = "0.1.0"
+    $version = "0.1.0" # Consider making this configurable or part of module data
     Write-Host "PowerTool v$version" -ForegroundColor Cyan
 }
 
 $script:ModuleCommands = @{
+    "help" = @{
+        Aliases = @("h")
+        Action = {
+            # $Path is the value of the -Path parameter from powertool.ps1, used as ForCommand here
+            # Use $script:commandDefinitions to access the main script's command definitions
+            Show-Help -ForCommand $Path -AllCommandData $script:commandDefinitions -CommandModuleMap $script:commandModuleMap
+        }
+        Summary = "Show this help message or help for a specific command."
+        Options = "[command-name]"
+        Examples = @(
+            "powertool help rename-random",
+            "powertool help filter-images"
+        )
+    }
     "version" = @{
         Aliases = @("v")
         Action = { Show-Version }
-    }
-    "help" = @{
-        Aliases = @("h")
-        Action = { Show-Help -ForCommand $Path }
+        Summary = "Show the current version of PowerTool."
+        Options = ""
+        Examples = @(
+            "powertool version",
+            "powertool v"
+        )
     }
 }
 

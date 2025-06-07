@@ -16,7 +16,9 @@ $modules = @(
 )
 
 # CommandDefinitions will store all commands from all modules
-$commandDefinitions = @{}
+$script:commandDefinitions = @{}
+$script:commandModuleMap = @{}
+
 foreach ($modulePathString in $modules) {
     # Use -PassThru to get the module object directly. -Force ensures it reloads.
     # -ErrorAction SilentlyContinue to handle if a module fails to import
@@ -30,23 +32,32 @@ foreach ($modulePathString in $modules) {
 
             if ($null -ne $moduleCommandsValue) {
                 if ($moduleCommandsValue.GetType().Name -eq "Hashtable") {
+                    # Extract module name from path for display
+                    $moduleName = (Split-Path $modulePathString -Leaf) -replace '\.psm1$', ''
+
                     foreach ($key in $moduleCommandsValue.Keys) {
-                        $commandDefinitions[$key] = $moduleCommandsValue[$key]
+                        $script:commandDefinitions[$key] = $moduleCommandsValue[$key]
+                        $script:commandModuleMap[$key] = $moduleName # Track which module this command belongs to
                     }
+                } else {
+                    Write-Warning "ModuleCommands exported by '$modulePathString' is not a Hashtable."
                 }
             }
+        } else {
+            # Module does not export 'ModuleCommands', which is fine.
         }
+    } else {
+        Write-Warning "Failed to load module: $modulePathString"
     }
 }
 
-$availableCommands = $commandDefinitions.Keys
+$availableCommands = $script:commandDefinitions.Keys
 
 $matchedCommand = $null
 $inputCommand = $Command.ToLower()
-Write-Host "DEBUG: User input command: '$inputCommand'" -ForegroundColor DarkCyan
 
-foreach ($cmdKey in $commandDefinitions.Keys) {
-    $commandEntry = $commandDefinitions[$cmdKey]
+foreach ($cmdKey in $script:commandDefinitions.Keys) {
+    $commandEntry = $script:commandDefinitions[$cmdKey]
     # Ensure Aliases property exists and is not null before trying to use it
     $aliases = @()
     if ($commandEntry -is [hashtable] -and $commandEntry.ContainsKey('Aliases') -and $null -ne $commandEntry.Aliases) {
@@ -54,17 +65,19 @@ foreach ($cmdKey in $commandDefinitions.Keys) {
     }
 
     $allVariants = @($cmdKey) + $aliases
-    Write-Host "DEBUG: Checking against command '$cmdKey', Aliases: $($aliases -join ', ')" -ForegroundColor Gray
     if ($inputCommand -in $allVariants) {
         $matchedCommand = $cmdKey
-        Write-Host "DEBUG: Matched command: '$matchedCommand'" -ForegroundColor Green
         break
     }
 }
 
 if ($matchedCommand) {
-    Write-Host "DEBUG: Executing action for command: '$matchedCommand'" -ForegroundColor DarkCyan
-    & $commandDefinitions[$matchedCommand].Action
+    $actionScriptBlock = $script:commandDefinitions[$matchedCommand].Action
+    # Recreate the scriptblock in the current scope to ensure $script: variables
+    # (like $script:commandDefinitions used by the help action)
+    # resolve to this (powertool.ps1) script's scope.
+    $actionToExecute = [scriptblock]::Create($actionScriptBlock.ToString())
+    & $actionToExecute
 } else {
     Write-Host "Unknown command: '$Command'" -ForegroundColor Red
 

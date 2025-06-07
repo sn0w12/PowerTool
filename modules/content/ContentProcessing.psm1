@@ -103,10 +103,23 @@ $script:ModuleCommands = @{
             }
             Remove-SmallImages -dir $Path -minWidth $effectiveMinWidth -minHeight $effectiveMinHeight
         }
+        Summary = "Remove images smaller than specified dimensions."
+        Options = "[path] -MinWidth <int> -MinHeight <int> | [path] -MinSize <int>"
+        Examples = @(
+            "powertool filter-images -MinWidth 800 -MinHeight 600",
+            "powertool fi `"C:\MyFolder`" -MinWidth 1920 -MinHeight 1080",
+            "powertool fi -MinSize 800"
+        )
     }
     "remove-text" = @{
         Aliases = @("rt")
         Action = { Remove-TextFromFiles -dir $Path -pattern $Pattern }
+        Summary = "Remove text from all txt files using regex pattern."
+        Options = "[path] -Pattern <regex>"
+        Examples = @(
+            "powertool remove-text -Pattern `"Advertisement.*?End`"",
+            "powertool rt `"C:\MyFolder`" -Pattern `"\d{4}-\d{2}-\d{2}\`""
+        )
     }
 }
 

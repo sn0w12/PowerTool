@@ -138,7 +138,9 @@ function Show-Help {
     param(
         [string]$ForCommand,
         [hashtable]$AllCommandData, # Receives $commandDefinitions from powertool.ps1
-        [hashtable]$CommandModuleMap = @{} # Receives $commandModuleMap from powertool.ps1
+        [hashtable]$CommandModuleMap = @{}, # Receives $commandModuleMap from powertool.ps1
+        [hashtable]$ExtensionCommands = @{}, # Receives $extensionCommands from powertool.ps1
+        [hashtable]$Extensions = @{} # Receives $extensions from powertool.ps1
     )
 
     if (-not $AllCommandData) {
@@ -193,39 +195,92 @@ function Show-Help {
         Write-Host ""
         Write-Host "Commands:" -ForegroundColor Blue
 
-        # Group commands by module
+        # Group commands by module and extension
         $moduleGroups = @{}
-        foreach ($commandName in $AllCommandData.Keys) {
-            $moduleName = if ($CommandModuleMap.ContainsKey($commandName)) {
-                $CommandModuleMap[$commandName]
-            } else {
-                "Unknown"
-            }
+        $extensionGroups = @{}
 
-            if (-not $moduleGroups.ContainsKey($moduleName)) {
-                $moduleGroups[$moduleName] = @()
+        foreach ($commandName in $AllCommandData.Keys) {
+            if ($ExtensionCommands.ContainsKey($commandName)) {
+                # This is an extension command
+                $extensionName = $ExtensionCommands[$commandName]
+                if (-not $extensionGroups.ContainsKey($extensionName)) {
+                    $extensionGroups[$extensionName] = @()
+                }
+                $extensionGroups[$extensionName] += $commandName
+            } else {
+                # This is a core module command
+                $moduleName = if ($CommandModuleMap.ContainsKey($commandName)) {
+                    $CommandModuleMap[$commandName]
+                } else {
+                    "Unknown"
+                }
+
+                if (-not $moduleGroups.ContainsKey($moduleName)) {
+                    $moduleGroups[$moduleName] = @()
+                }
+                $moduleGroups[$moduleName] += $commandName
             }
-            $moduleGroups[$moduleName] += $commandName
         }
 
         # Define module display order (Help first, then others alphabetically)
         $moduleOrder = @("Help") + ($moduleGroups.Keys | Where-Object { $_ -ne "Help" } | Sort-Object)
 
-        $isFirstModule = $true
+        $isFirstGroup = $true
+
+        # Display core modules first
         foreach ($moduleName in $moduleOrder) {
             if (-not $moduleGroups.ContainsKey($moduleName)) { continue }
 
-            # Add spacing between modules (except before the first one)
-            if (-not $isFirstModule) {
+            # Add spacing between groups (except before the first one)
+            if (-not $isFirstGroup) {
                 Write-Host ""
             }
-            $isFirstModule = $false
+            $isFirstGroup = $false
 
             # Display module header
             Write-Host "  ${moduleName}:" -ForegroundColor Magenta
 
             # Sort commands within each module
             $sortedCommands = $moduleGroups[$moduleName] | Sort-Object
+
+            foreach ($commandNameKey in $sortedCommands) {
+                $command = $AllCommandData[$commandNameKey]
+                $shortcutsText = if ($command.Aliases) { " (" + ($command.Aliases -join ', ') + ")" } else { "" }
+                Write-Host "    " -NoNewline
+                Write-Host $commandNameKey -NoNewline -ForegroundColor Cyan
+                Write-Host $shortcutsText -NoNewline -ForegroundColor Yellow
+                $paddingLength = 23 - ($commandNameKey.Length + $shortcutsText.Length)
+                if ($paddingLength -gt 0) {
+                    Write-Host (" " * $paddingLength) -NoNewline
+                } else {
+                    Write-Host " " -NoNewline
+                }
+                Write-Host $command.Summary -ForegroundColor White
+                Write-Host "      Options: " -NoNewline -ForegroundColor White
+                Write-ColoredOptions -OptionsData $command.Options
+            }
+        }
+
+        # Display extensions
+        $sortedExtensions = $extensionGroups.Keys | Sort-Object
+        foreach ($extensionName in $sortedExtensions) {
+            # Add spacing between groups
+            if (-not $isFirstGroup) {
+                Write-Host ""
+            }
+            $isFirstGroup = $false
+
+            # Display extension header with version
+            $extensionVersion = if ($Extensions.ContainsKey($extensionName)) {
+                "v$($Extensions[$extensionName].Version)"
+            } else {
+                ""
+            }
+            Write-Host "  ${extensionName} " -NoNewline -ForegroundColor DarkMagenta
+            Write-Host "(${extensionVersion}):" -ForegroundColor DarkGray
+
+            # Sort commands within each extension
+            $sortedCommands = $extensionGroups[$extensionName] | Sort-Object
 
             foreach ($commandNameKey in $sortedCommands) {
                 $command = $AllCommandData[$commandNameKey]
@@ -486,7 +541,7 @@ $script:ModuleCommands = @{
         Action = {
             # $Path is the value of the -Path parameter from powertool.ps1, used as ForCommand here
             # Use $script:commandDefinitions to access the main script's command definitions
-            Show-Help -ForCommand $Path -AllCommandData $script:commandDefinitions -CommandModuleMap $script:commandModuleMap
+            Show-Help -ForCommand $Path -AllCommandData $script:commandDefinitions -CommandModuleMap $script:commandModuleMap -ExtensionCommands $script:extensionCommands -Extensions $script:extensions
         }
         Summary = "Show this help message or help for a specific command."
         Options = @{

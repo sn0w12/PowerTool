@@ -4,7 +4,8 @@ param (
     [int]$MinWidth = 0,
     [int]$MinHeight = 0,
     [int]$MinSize = 0,
-    [string]$Pattern
+    [string]$Pattern,
+    [switch]$Version
 )
 
 # Use current directory if no path provided for commands that need it
@@ -224,6 +225,12 @@ function Show-Help {
     }
 }
 
+function Show-Version {
+    $version = "0.1.0"
+
+    Write-Host "PowerTool v$version" -ForegroundColor Cyan
+}
+
 switch ($Command.ToLower()) {
     "rename-random" {
         Rename-FilesRandomly -dir $Path
@@ -247,6 +254,9 @@ switch ($Command.ToLower()) {
     }
     "remove-text" {
         Remove-TextFromFiles -dir $Path -pattern $Pattern
+    }
+    "version" {
+        Show-Version
     }
     "help" {
         Show-Help -ForCommand $Path # $Path contains the function name, or is $null

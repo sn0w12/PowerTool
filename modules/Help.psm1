@@ -3,7 +3,6 @@ function Write-ColoredOptions {
 
     if (-not $OptionsData -or ($OptionsData -is [hashtable] -and $OptionsData.Count -eq 0)) {
         Write-Host "None" -ForegroundColor DarkGray
-        Write-Host "" # Ensure a newline
         return
     }
 
@@ -15,9 +14,6 @@ function Write-ColoredOptions {
         foreach ($key in $sortedKeys) {
             $syntaxLines += ,$OptionsData[$key]  # Use comma operator to preserve array structure
         }
-    } elseif ($OptionsData[0] -is [array]) {
-        # Legacy array format - convert to new format
-        $syntaxLines = $OptionsData
     } else {
         # Single syntax line (array of hashtables/tokens)
         $syntaxLines = @($OptionsData)
@@ -348,18 +344,6 @@ function Search-Commands {
                     }
                     $optionsStringForSearch += "| "
                 }
-            } else {
-                # Legacy format handling
-                $syntaxLinesToSearch = if ($command.Options[0] -is [array]) { $command.Options } else { @($command.Options) }
-                foreach ($line in $syntaxLinesToSearch) {
-                    foreach ($tokenInfo in $line) {
-                        $optionsStringForSearch += $tokenInfo.Token + " "
-                        if ($tokenInfo.Description) {
-                            $optionsStringForSearch += $tokenInfo.Description + " "
-                        }
-                    }
-                    $optionsStringForSearch += "| "
-                }
             }
 
             if ($optionsStringForSearch.ToLower().Contains($searchTerm)) {
@@ -421,6 +405,81 @@ function Search-Commands {
     }
 }
 
+function Test-ModuleCommands {
+    param(
+        [hashtable]$AllCommandData
+    )
+    $validTypes = @("Argument", "OptionalArgument", "Parameter", "OptionalParameter", "Type")
+    $allAliases = @{}
+    $errors = @()
+    $warnings = @()
+
+    foreach ($cmdName in $AllCommandData.Keys) {
+        $cmd = $AllCommandData[$cmdName]
+        # Check for Summary and Options
+        if (-not $cmd.ContainsKey('Summary')) {
+            $errors += "Command '$cmdName' is missing a 'Summary'."
+        }
+        if (-not $cmd.ContainsKey('Options')) {
+            $errors += "Command '$cmdName' is missing an 'Options' key."
+        }
+        # Check aliases for duplicates
+        if ($cmd.Aliases) {
+            foreach ($alias in $cmd.Aliases) {
+                $aliasLower = $alias.ToLower()
+                if ($allAliases.ContainsKey($aliasLower)) {
+                    $errors += "Duplicate alias '$alias' found in commands '$cmdName' and '$($allAliases[$aliasLower])'."
+                } else {
+                    $allAliases[$aliasLower] = $cmdName
+                }
+            }
+        }
+        # Check option types
+        if ($cmd.Options) {
+            if ($cmd.Options -is [hashtable] -and $cmd.Options.Count -gt 0) {
+                # New numeric group format
+                foreach ($key in $cmd.Options.Keys) {
+                    $group = $cmd.Options[$key]
+                    if ($group -is [array]) {
+                        foreach ($token in $group) {
+                            if ($token -is [hashtable] -and $token.ContainsKey('Type') -and $token.Type) {
+                                if ($validTypes -notcontains $token.Type) {
+                                    $errors += "Command '$cmdName' has invalid option type '$($token.Type)' for token '$($token.Token)'. Valid types are: $($validTypes -join ', ')."
+                                }
+                            }
+                        }
+                    }
+                }
+            } elseif ($cmd.Options -is [array]) {
+                # Legacy array format
+                foreach ($token in $cmd.Options) {
+                    if ($token -is [hashtable] -and $token.ContainsKey('Type') -and $token.Type) {
+                        if ($validTypes -notcontains $token.Type) {
+                            $errors += "Command '$cmdName' has invalid option type '$($token.Type)' for token '$($token.Token)'. Valid types are: $($validTypes -join ', ')."
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Write-Host "ModuleCommands Validation Results:" -ForegroundColor Blue
+    if ($errors.Count -eq 0) {
+        Write-Host "  No errors found." -ForegroundColor Green
+    } else {
+        Write-Host "  Errors:" -ForegroundColor Red
+        foreach ($err in $errors) {
+            Write-Host "    $err" -ForegroundColor Red
+        }
+    }
+    if ($warnings.Count -gt 0) {
+        Write-Host "  Warnings:" -ForegroundColor Yellow
+        foreach ($warn in $warnings) {
+            Write-Host "    $warn" -ForegroundColor Yellow
+        }
+    }
+}
+
 $script:ModuleCommands = @{
     "help" = @{
         Aliases = @("h")
@@ -461,12 +520,24 @@ $script:ModuleCommands = @{
         Aliases = @("v", "ver")
         Action = { Show-Version -version $version }
         Summary = "Show the current version of PowerTool."
-        Options = @{} # No options - empty hashtable
+        Options = @{}
         Examples = @(
             "powertool version",
             "powertool v"
         )
     }
+    "validate" = @{
+        Aliases = @("check", "val")
+        Action = {
+            Test-ModuleCommands -AllCommandData $script:commandDefinitions
+        }
+        Summary = "Validate all ModuleCommands for correct structure, option types, and duplicate aliases."
+        Options = @{}
+        Examples = @(
+            "powertool validate",
+            "pt val"
+        )
+    }
 }
 
-Export-ModuleMember -Function Show-Help, Write-ColoredOptions, Write-ColoredExample, Show-Version, Search-Commands -Variable ModuleCommands
+Export-ModuleMember -Function Show-Help, Write-ColoredOptions, Write-ColoredExample, Show-Version, Search-Commands, Test-ModuleCommands -Variable ModuleCommands

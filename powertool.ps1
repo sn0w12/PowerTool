@@ -9,12 +9,16 @@ param (
 )
 
 $script:version = "0.1.0"
-$modules = @(
-    "modules/Help.psm1",
-    "modules/Util.psm1",
-    "modules/fileops/FileOperations.psm1",
-    "modules/content/ContentProcessing.psm1"
-)
+$modulesPath = Join-Path $PSScriptRoot "modules"
+$modules = @()
+
+if (Test-Path $modulesPath) {
+    $modules = Get-ChildItem -Path $modulesPath -Filter "*.psm1" -Recurse | ForEach-Object {
+        $_.FullName.Substring($PSScriptRoot.Length + 1).Replace('\', '/')
+    }
+} else {
+    Write-Warning "Modules directory not found: $modulesPath"
+}
 
 $script:commandDefinitions = @{}
 $script:commandModuleMap = @{}

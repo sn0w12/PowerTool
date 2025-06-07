@@ -71,7 +71,11 @@ function Write-ColoredOptions {
     Write-Host "" # Ensure a newline after options are printed
 }
 
-$script:HeaderText = "PowerTool - Utility CLI for Windows"
+function Write-Header {
+    Write-Host "PowerTool" -ForegroundColor Cyan -NoNewline
+    Write-Host " - Utility CLI for Windows"
+    Write-Host ""
+}
 
 function Write-UsageSection {
     Write-Host "Usage:" -ForegroundColor Blue
@@ -146,8 +150,7 @@ function Show-Help {
     }
 
     if ($ForCommand) {
-        Write-Host $script:HeaderText -ForegroundColor Cyan
-        Write-Host ""
+        Write-Header
         $commandKey = $ForCommand.ToLower()
         $foundCommandDetails = $null
         $foundCommandName = $null
@@ -188,8 +191,7 @@ function Show-Help {
             Write-Host "Use 'powertool help' to see all available commands." -ForegroundColor White
         }
     } else {
-        Write-Host $script:HeaderText -ForegroundColor Cyan
-        Write-Host ""
+        Write-Header
         Write-UsageSection
         Write-Host ""
         Write-Host "Commands:" -ForegroundColor Blue

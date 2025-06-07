@@ -109,8 +109,6 @@ function Show-Help {
     if ($ForCommand) {
         Write-Host $script:HeaderText -ForegroundColor Cyan
         Write-Host ""
-        Write-UsageSection
-        Write-Host ""
         $commandKey = $ForCommand.ToLower()
         $foundCommandDetails = $null
         $foundCommandName = $null

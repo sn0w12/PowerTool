@@ -231,7 +231,7 @@ $script:ModuleCommands = @{
         )
     }
     "version" = @{
-        Aliases = @("v")
+        Aliases = @("v", "ver")
         Action = { Show-Version }
         Summary = "Show the current version of PowerTool."
         Options = ""

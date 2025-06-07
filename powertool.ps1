@@ -22,6 +22,8 @@ if (Test-Path $modulesPath) {
 
 $script:commandDefinitions = @{}
 $script:commandModuleMap = @{}
+$script:extensions = @{}
+$script:extensionCommands = @{}
 
 foreach ($modulePathString in $modules) {
     # Use -PassThru to get the module object directly. -Force ensures it reloads.
@@ -59,6 +61,85 @@ foreach ($modulePathString in $modules) {
     } else {
         Write-Warning "Failed to load module: $modulePathString"
     }
+}
+
+$extensionsPath = Join-Path $PSScriptRoot "extensions"
+if (Test-Path $extensionsPath) {
+    $extensionDirs = Get-ChildItem -Path $extensionsPath -Directory
+
+    foreach ($extensionDir in $extensionDirs) {
+        $manifestPath = Join-Path $extensionDir.FullName "extension.json"
+
+        if (Test-Path $manifestPath) {
+            try {
+                $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+
+                # Validate required properties
+                if (-not $manifest.name -or -not $manifest.description -or -not $manifest.modules) {
+                    Write-Warning "Invalid extension manifest in '$($extensionDir.Name)': Missing required properties (name, description, modules)"
+                    continue
+                }
+
+                $extensionInfo = @{
+                    Name = $manifest.name
+                    Description = $manifest.description
+                    Version = if ($manifest.version) { $manifest.version } else { "1.0.0" }
+                    Path = $extensionDir.FullName
+                    Modules = @()
+                }
+
+                # Load extension modules
+                foreach ($moduleRelPath in $manifest.modules) {
+                    $modulePath = Join-Path $extensionDir.FullName $moduleRelPath
+
+                    if (Test-Path $modulePath) {
+                        $loadedModule = Import-Module $modulePath -Force -PassThru -ErrorAction SilentlyContinue
+
+                        if ($loadedModule) {
+                            $extensionInfo.Modules += $moduleRelPath
+
+                            if ($loadedModule.ExportedVariables.ContainsKey('ModuleCommands')) {
+                                $moduleCommandsInfo = $loadedModule.ExportedVariables['ModuleCommands']
+                                $moduleCommandsValue = $moduleCommandsInfo.Value
+
+                                if ($null -ne $moduleCommandsValue -and $moduleCommandsValue.GetType().Name -eq "Hashtable") {
+                                    foreach ($key in $moduleCommandsValue.Keys) {
+                                        $commandEntry = $moduleCommandsValue[$key]
+
+                                        if ($script:commandDefinitions.ContainsKey($key)) {
+                                            $existingSource = if ($script:commandModuleMap.ContainsKey($key)) {
+                                                "module '$($script:commandModuleMap[$key])'"
+                                            } elseif ($script:extensionCommands.ContainsKey($key)) {
+                                                "extension '$($script:extensionCommands[$key])'"
+                                            } else {
+                                                "unknown source"
+                                            }
+                                            Write-Warning "Duplicate command '$key' found in extension '$($manifest.name)'. Previously defined in $existingSource. The new definition will override the previous one."
+                                        }
+
+                                        $script:commandDefinitions[$key] = $commandEntry
+                                        $script:extensionCommands[$key] = $manifest.name
+                                    }
+                                }
+                            }
+                        } else {
+                            Write-Warning "Failed to load module '$moduleRelPath' from extension '$($manifest.name)'"
+                        }
+                    } else {
+                        Write-Warning "Module file not found: '$moduleRelPath' in extension '$($manifest.name)'"
+                    }
+                }
+
+                $script:extensions[$manifest.name] = $extensionInfo
+            } catch {
+                Write-Warning "Failed to load extension manifest from '$($extensionDir.Name)': $($_.Exception.Message)"
+            }
+        } else {
+            Write-Warning "Extension directory '$($extensionDir.Name)' missing extension.json manifest file"
+        }
+    }
+} else {
+    Write-Verbose "Extensions directory not found: $extensionsPath"
 }
 
 $availableCommands = $script:commandDefinitions.Keys

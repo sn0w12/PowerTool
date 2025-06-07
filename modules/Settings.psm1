@@ -1,8 +1,6 @@
 $script:settingsPath = Join-Path $env:APPDATA "PowerTool\settings.json"
 $script:settingsDir = Split-Path $script:settingsPath -Parent
 $script:defaultCoreSettings = @{
-    "core.theme" = "default"
-    "core.auto-update" = $true
     "core.verbose" = $false
     "core.confirm-destructive" = $true
     "core.max-history" = 100
@@ -405,7 +403,6 @@ $script:ModuleCommands = @{
             )
         }
         Examples = @(
-            "powertool set core.theme dark",
             "powertool set core.verbose true",
             "pt set core.max-history 50"
         )
@@ -430,7 +427,6 @@ $script:ModuleCommands = @{
             )
         }
         Examples = @(
-            "powertool get core.theme",
             "powertool get core.verbose",
             "pt get core.max-history"
         )
@@ -456,7 +452,6 @@ $script:ModuleCommands = @{
             )
         }
         Examples = @(
-            "powertool reset core.theme",
             "powertool reset all",
             "pt reset core.max-history"
         )

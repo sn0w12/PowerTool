@@ -16,28 +16,57 @@ function Remove-SmallImages($dir, $minWidth, $minHeight) {
         $imageExtensions -contains $_.Extension.ToLower()
     }
 
-    $removedCount = 0
+    # Check core settings
+    $confirmDestructive = Get-Setting -Key "core.confirm-destructive"
+    $verboseMode = Get-Setting -Key "core.verbose"
+
+    # Pre-scan to count files that will be removed
+    $filesToRemove = @()
     foreach ($imageFile in $imageFiles) {
         try {
-            # Load image to get dimensions
             Add-Type -AssemblyName System.Drawing
             $image = [System.Drawing.Image]::FromFile($imageFile.FullName)
-
             $width = $image.Width
             $height = $image.Height
-
-            # Dispose of image object to release file lock
             $image.Dispose()
 
-            # Remove if either dimension is smaller than minimum
             if ($width -lt $minWidth -or $height -lt $minHeight) {
-                Remove-Item -Path $imageFile.FullName -Force
-                $removedCount++
-                Write-Host "Removed: $($imageFile.Name) (${width}x${height})" -ForegroundColor Yellow
+                $filesToRemove += @{
+                    File = $imageFile
+                    Width = $width
+                    Height = $height
+                }
             }
         }
         catch {
-            Write-Warning "Could not process image: $($imageFile.Name) - $($_.Exception.Message)"
+            if ($verboseMode) {
+                Write-Warning "Could not process image: $($imageFile.Name) - $($_.Exception.Message)"
+            }
+        }
+    }
+
+    if ($confirmDestructive -and $filesToRemove.Count -gt 0) {
+        $response = Read-Host "Are you sure you want to delete $($filesToRemove.Count) image(s) smaller than ${minWidth}x${minHeight} from '$dir'? (y/N)"
+        if ($response -notmatch '^[Yy]([Ee][Ss])?$') {
+            Write-Host "Operation cancelled." -ForegroundColor Yellow
+            return
+        }
+    }
+
+    $removedCount = 0
+    foreach ($fileInfo in $filesToRemove) {
+        try {
+            if ($verboseMode) {
+                Write-Host "Removing: $($fileInfo.File.Name) ($($fileInfo.Width)x$($fileInfo.Height))" -ForegroundColor DarkGray
+            }
+            Remove-Item -Path $fileInfo.File.FullName -Force
+            $removedCount++
+            if (-not $verboseMode) {
+                Write-Host "Removed: $($fileInfo.File.Name) ($($fileInfo.Width)x$($fileInfo.Height))" -ForegroundColor Yellow
+            }
+        }
+        catch {
+            Write-Warning "Failed to remove image: $($fileInfo.File.Name) - $($_.Exception.Message)"
         }
     }
 
@@ -62,6 +91,18 @@ function Remove-TextFromFiles($dir, $pattern) {
     # Get all txt files recursively
     $txtFiles = Get-ChildItem -Path $dir -Filter "*.txt" -File -Recurse
 
+    # Check core settings
+    $confirmDestructive = Get-Setting -Key "core.confirm-destructive"
+    $verboseMode = Get-Setting -Key "core.verbose"
+
+    if ($confirmDestructive -and $txtFiles.Count -gt 0) {
+        $response = Read-Host "Are you sure you want to modify $($txtFiles.Count) text file(s) in '$dir' using pattern '$pattern'? (y/N)"
+        if ($response -notmatch '^[Yy]([Ee][Ss])?$') {
+            Write-Host "Operation cancelled." -ForegroundColor Yellow
+            return
+        }
+    }
+
     $processedCount = 0
     $modifiedCount = 0
 
@@ -77,7 +118,13 @@ function Remove-TextFromFiles($dir, $pattern) {
             if ($content -ne $originalContent) {
                 Set-Content -Path $txtFile.FullName -Value $content -Encoding UTF8 -NoNewline
                 $modifiedCount++
-                Write-Host "Modified: $($txtFile.Name)" -ForegroundColor Yellow
+                if ($verboseMode) {
+                    Write-Host "Modified: $($txtFile.Name)" -ForegroundColor DarkGray
+                } else {
+                    Write-Host "Modified: $($txtFile.Name)" -ForegroundColor Yellow
+                }
+            } elseif ($verboseMode) {
+                Write-Host "No changes: $($txtFile.Name)" -ForegroundColor DarkGray
             }
 
             $processedCount++

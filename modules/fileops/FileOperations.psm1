@@ -14,9 +14,27 @@ function Rename-FilesRandomly($dir, $recursive = $false) {
         Get-ChildItem -Path $dir -File
     }
 
+    # Check core settings for confirmation and verbose mode
+    $confirmDestructive = Get-Setting -Key "core.confirm-destructive"
+    $verboseMode = Get-Setting -Key "core.verbose"
+
+    if ($confirmDestructive -and $files.Count -gt 0) {
+        $recursiveText = if ($recursive) { " recursively" } else { "" }
+        $response = Read-Host "Are you sure you want to rename $($files.Count) file(s)${recursiveText} in '$dir' with random names? (y/N)"
+        if ($response -notmatch '^[Yy]([Ee][Ss])?$') {
+            Write-Host "Operation cancelled." -ForegroundColor Yellow
+            return
+        }
+    }
+
     foreach ($file in $files) {
         $ext = $file.Extension
         $newName = [guid]::NewGuid().ToString() + $ext
+
+        if ($verboseMode) {
+            Write-Host "Renaming '$($file.Name)' to '$newName'" -ForegroundColor DarkGray
+        }
+
         Rename-Item -Path $file.FullName -NewName $newName
     }
 
@@ -36,6 +54,18 @@ function Merge-Directory($dir) {
     # Get all files recursively, excluding files already in the root
     $files = Get-ChildItem -Path $dir -File -Recurse | Where-Object { $_.DirectoryName -ne $dir }
 
+    # Check core settings
+    $confirmDestructive = Get-Setting -Key "core.confirm-destructive"
+    $verboseMode = Get-Setting -Key "core.verbose"
+
+    if ($confirmDestructive -and $files.Count -gt 0) {
+        $response = Read-Host "Are you sure you want to flatten directory '$dir' and move $($files.Count) file(s) to the root? (y/N)"
+        if ($response -notmatch '^[Yy]([Ee][Ss])?$') {
+            Write-Host "Operation cancelled." -ForegroundColor Yellow
+            return
+        }
+    }
+
     $movedCount = 0
     foreach ($file in $files) {
         $destinationPath = Join-Path $dir $file.Name
@@ -49,6 +79,10 @@ function Merge-Directory($dir) {
             $counter++
         }
 
+        if ($verboseMode) {
+            Write-Host "Moving '$($file.FullName)' to '$destinationPath'" -ForegroundColor DarkGray
+        }
+
         Move-Item -Path $file.FullName -Destination $destinationPath
         $movedCount++
     }
@@ -60,6 +94,9 @@ function Merge-Directory($dir) {
             (Get-ChildItem $_.FullName -Force | Measure-Object).Count -eq 0
         }
         foreach ($emptyDir in $emptyDirs) {
+            if ($verboseMode) {
+                Write-Host "Removing empty directory '$($emptyDir.FullName)'" -ForegroundColor DarkGray
+            }
             Remove-Item -Path $emptyDir.FullName -Force
             $removedDirs++
         }

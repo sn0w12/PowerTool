@@ -148,6 +148,8 @@ function Show-Help {
         return
     }
 
+    $verboseMode = Get-Setting -Key "core.verbose"
+
     if ($ForCommand) {
         Write-Header
         $commandKey = $ForCommand.ToLower()
@@ -184,6 +186,13 @@ function Show-Help {
                     Write-Host "  " -NoNewline
                     Write-ColoredExample -ExampleText $example
                 }
+            }
+
+            if ($verboseMode) {
+                Write-Host ""
+                Write-Host "Settings Info:" -ForegroundColor DarkGray
+                Write-Host "  Verbose mode: enabled" -ForegroundColor DarkGray
+                Write-Host "  Confirmation prompts: $((Get-Setting -Key 'core.confirm-destructive'))" -ForegroundColor DarkGray
             }
         } else {
             Write-Host "Unknown command: '$ForCommand'. Cannot show specific help." -ForegroundColor Red
@@ -327,6 +336,7 @@ function Search-Commands {
         return
     }
 
+    $verboseMode = Get-Setting -Key "core.verbose"
     $searchTerm = $SearchTerm.ToLower()
     $matchingCommands = @()
 
@@ -429,6 +439,9 @@ function Search-Commands {
     }
 
     Write-Host "Found $($matchingCommands.Count) matching command(s):" -ForegroundColor Green
+    if ($verboseMode) {
+        Write-Host "Search performed in: command names, aliases, summaries, and options" -ForegroundColor DarkGray
+    }
     Write-Host ""
 
     # Sort by relevance score (highest first), then by name

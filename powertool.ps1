@@ -17,6 +17,7 @@ $modules = @(
 
 $script:commandDefinitions = @{}
 $script:commandModuleMap = @{}
+$script:aliasMap = @{}
 
 foreach ($modulePathString in $modules) {
     # Use -PassThru to get the module object directly. -Force ensures it reloads.
@@ -35,8 +36,20 @@ foreach ($modulePathString in $modules) {
                     $moduleName = (Split-Path $modulePathString -Leaf) -replace '\.psm1$', ''
 
                     foreach ($key in $moduleCommandsValue.Keys) {
-                        $script:commandDefinitions[$key] = $moduleCommandsValue[$key]
-                        $script:commandModuleMap[$key] = $moduleName # Track which module this command belongs to
+                        $commandEntry = $moduleCommandsValue[$key]
+                        $script:commandDefinitions[$key] = $commandEntry
+                        $script:commandModuleMap[$key] = $moduleName
+
+                        # Check for duplicate aliases
+                        if ($commandEntry -is [hashtable] -and $commandEntry.ContainsKey('Aliases') -and $null -ne $commandEntry.Aliases) {
+                            foreach ($alias in $commandEntry.Aliases) {
+                                if ($script:aliasMap.ContainsKey($alias)) {
+                                    Write-Warning "Duplicate alias '$alias' found: used by both '$($script:aliasMap[$alias])' and '$key'"
+                                } else {
+                                    $script:aliasMap[$alias] = $key
+                                }
+                            }
+                        }
                     }
                 } else {
                     Write-Warning "ModuleCommands exported by '$modulePathString' is not a Hashtable."

@@ -1,6 +1,6 @@
 param (
-    [Parameter(Mandatory=$false)][string]$Command = "help",
-    [string]$Path,
+    [Parameter(Mandatory=$false, Position=0)][string]$Command = "help",
+    [Parameter(Position=1)][string]$Path,
     [int]$MinWidth = 0,
     [int]$MinHeight = 0,
     [int]$MinSize = 0,
@@ -9,7 +9,7 @@ param (
 )
 
 # Use current directory if no path provided for commands that need it
-if (-not $Path -and $Command.ToLower() -ne "help") {
+if (-not $Path -and $Command.ToLower() -notin @("help", "h", "version", "v")) {
     $Path = Get-Location
 }
 
@@ -198,14 +198,28 @@ function Show-Help {
         Write-Host $helpContent.preamble
         Write-Host ""
         $commandKey = $ForCommand.ToLower()
-        if ($helpContent.commands.PSObject.Properties.Name -contains $commandKey) {
-            $commandHelp = $helpContent.commands.$commandKey
+
+        # Find command by name or shortcut
+        $foundCommand = $null
+        $foundCommandName = $null
+        foreach ($commandName in $helpContent.commands.PSObject.Properties.Name) {
+            $command = $helpContent.commands.$commandName
+            if ($commandName -eq $commandKey -or ($command.shortcuts -and $command.shortcuts -contains $commandKey)) {
+                $foundCommand = $command
+                $foundCommandName = $commandName
+                break
+            }
+        }
+
+        if ($foundCommand) {
+            $shortcutsText = if ($foundCommand.shortcuts) { " ($($foundCommand.shortcuts -join ', '))" } else { "" }
             Write-Host "Command Details:"
-            Write-Host "  $($commandKey.PadRight(25)) $($commandHelp.summary)"
-            Write-Host "    Options: $($commandHelp.options)"
+            Write-Host "  $($foundCommandName)$shortcutsText"
+            Write-Host "    $($foundCommand.summary)"
+            Write-Host "    Options: $($foundCommand.options)"
             Write-Host ""
             Write-Host "Examples:"
-            foreach ($example in $commandHelp.examples) {
+            foreach ($example in $foundCommand.examples) {
                 Write-Host "  $example"
             }
         } else {
@@ -219,7 +233,9 @@ function Show-Help {
         Write-Host "Commands:"
         foreach ($commandName in $helpContent.commands.PSObject.Properties.Name) {
             $command = $helpContent.commands.$commandName
-            Write-Host "  $($commandName.PadRight(25)) $($command.summary)"
+            $shortcutsText = if ($command.shortcuts) { " ($($command.shortcuts -join ', '))" } else { "" }
+            $commandWithShortcuts = "$commandName$shortcutsText"
+            Write-Host "  $($commandWithShortcuts.PadRight(25)) $($command.summary)"
             Write-Host "    Options: $($command.options)"
         }
     }
@@ -232,16 +248,16 @@ function Show-Version {
 }
 
 switch ($Command.ToLower()) {
-    "rename-random" {
+    { $_ -in @("rename-random", "rr") } {
         Rename-FilesRandomly -dir $Path
     }
-    "rename-random-recursive" {
+    { $_ -in @("rename-random-recursive", "rrr") } {
         Rename-FilesRandomly -dir $Path -recursive $true
     }
-    "flatten" {
+    { $_ -in @("flatten", "f") } {
         Merge-Directory -dir $Path
     }
-    "filter-images" {
+    { $_ -in @("filter-images", "fi") } {
         # Use MinSize for both dimensions if provided, otherwise use individual parameters
         $effectiveMinWidth = if ($MinSize -gt 0) { $MinSize } else { $MinWidth }
         $effectiveMinHeight = if ($MinSize -gt 0) { $MinSize } else { $MinHeight }
@@ -252,13 +268,13 @@ switch ($Command.ToLower()) {
         }
         Remove-SmallImages -dir $Path -minWidth $effectiveMinWidth -minHeight $effectiveMinHeight
     }
-    "remove-text" {
+    { $_ -in @("remove-text", "rt") } {
         Remove-TextFromFiles -dir $Path -pattern $Pattern
     }
-    "version" {
+    { $_ -in @("version", "v") } {
         Show-Version
     }
-    "help" {
+    { $_ -in @("help", "h") } {
         Show-Help -ForCommand $Path # $Path contains the function name, or is $null
     }
     default {

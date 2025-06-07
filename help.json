@@ -3,6 +3,7 @@
     "commands": {
         "help": {
             "summary": "Show this help message or help for a specific command.",
+            "shortcuts": ["h"],
             "options": "[command-name]",
             "examples": [
                 "powertool help rename-random",
@@ -11,44 +12,45 @@
         },
         "rename-random": {
             "summary": "Rename all files in a folder with random names.",
+            "shortcuts": ["rr"],
             "options": "[path]",
             "examples": [
                 "powertool rename-random",
-                "powertool rename-random \"C:\\MyFolder\""
+                "powertool rr \"C:\\MyFolder\""
             ]
         },
         "rename-random-recursive": {
             "summary": "Rename all files recursively in subfolders with random names.",
+            "shortcuts": ["rrr"],
             "options": "[path]",
             "examples": [
                 "powertool rename-random-recursive",
-                "powertool rename-random-recursive \"C:\\MyFolder\""
+                "powertool rrr \"C:\\MyFolder\""
             ]
         },
         "flatten": {
             "summary": "Move all files from subdirectories to the top level.",
+            "shortcuts": ["f"],
             "options": "[path]",
-            "examples": [
-                "powertool flatten",
-                "powertool flatten \"C:\\MyFolder\""
-            ]
+            "examples": ["powertool flatten", "powertool f \"C:\\MyFolder\""]
         },
         "filter-images": {
             "summary": "Remove images smaller than specified dimensions.",
+            "shortcuts": ["fi"],
             "options": "[path] -MinWidth <int> -MinHeight <int> | [path] -MinSize <int>",
             "examples": [
                 "powertool filter-images -MinWidth 800 -MinHeight 600",
-                "powertool filter-images \"C:\\MyFolder\" -MinWidth 1920 -MinHeight 1080",
-                "powertool filter-images -MinSize 800",
-                "powertool filter-images \"C:\\MyFolder\" -MinSize 1024"
+                "powertool fi \"C:\\MyFolder\" -MinWidth 1920 -MinHeight 1080",
+                "powertool fi -MinSize 800"
             ]
         },
         "remove-text": {
             "summary": "Remove text from all txt files using regex pattern.",
+            "shortcuts": ["rt"],
             "options": "[path] -Pattern <regex>",
             "examples": [
                 "powertool remove-text -Pattern \"Advertisement.*?End\"",
-                "powertool remove-text \"C:\\MyFolder\" -Pattern \"\\d{4}-\\d{2}-\\d{2}\""
+                "powertool rt \"C:\\MyFolder\" -Pattern \"\\d{4}-\\d{2}-\\d{2}\""
             ]
         }
     }

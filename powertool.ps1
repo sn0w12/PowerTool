@@ -37,6 +37,11 @@ foreach ($modulePathString in $modules) {
 
                     foreach ($key in $moduleCommandsValue.Keys) {
                         $commandEntry = $moduleCommandsValue[$key]
+                        if ($script:commandDefinitions.ContainsKey($key)) {
+                            $existingModule = $script:commandModuleMap[$key]
+                            Write-Warning "Duplicate command '$key' found in module '$moduleName'. Previously defined in module '$existingModule'. The new definition will override the previous one."
+                        }
+
                         $script:commandDefinitions[$key] = $commandEntry
                         $script:commandModuleMap[$key] = $moduleName
                     }

@@ -94,7 +94,7 @@ $script:ModuleCommands = @{
     "filter-images" = @{
         Aliases = @("fi")
         Action = {
-            $targetPath = Get-TargetPath -Path $Path
+            $targetPath = Get-TargetPath -InputPath $Value1
             $effectiveMinWidth = if ($MinSize -gt 0) { $MinSize } else { $MinWidth }
             $effectiveMinHeight = if ($MinSize -gt 0) { $MinSize } else { $MinHeight }
 
@@ -127,7 +127,7 @@ $script:ModuleCommands = @{
     "remove-text" = @{
         Aliases = @("rt")
         Action = {
-            $targetPath = Get-TargetPath -Path $Path
+            $targetPath = Get-TargetPath -InputPath $Value1
             Remove-TextFromFiles -dir $targetPath -pattern $Pattern
         }
         Summary = "Remove text from all txt files using regex pattern."

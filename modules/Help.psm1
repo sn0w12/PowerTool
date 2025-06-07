@@ -539,9 +539,9 @@ $script:ModuleCommands = @{
     "help" = @{
         Aliases = @("h")
         Action = {
-            # $Path is the value of the -Path parameter from powertool.ps1, used as ForCommand here
+            # $Value1 is the value of the -Value1 parameter from powertool.ps1, used as ForCommand here
             # Use $script:commandDefinitions to access the main script's command definitions
-            Show-Help -ForCommand $Path -AllCommandData $script:commandDefinitions -CommandModuleMap $script:commandModuleMap -ExtensionCommands $script:extensionCommands -Extensions $script:extensions
+            Show-Help -ForCommand $Value1 -AllCommandData $script:commandDefinitions -CommandModuleMap $script:commandModuleMap -ExtensionCommands $script:extensionCommands -Extensions $script:extensions
         }
         Summary = "Show this help message or help for a specific command."
         Options = @{
@@ -557,7 +557,7 @@ $script:ModuleCommands = @{
     "search" = @{
         Aliases = @("find", "s")
         Action = {
-            Search-Commands -SearchTerm $Path -AllCommandData $script:commandDefinitions -CommandModuleMap $script:commandModuleMap
+            Search-Commands -SearchTerm $Value1 -AllCommandData $script:commandDefinitions -CommandModuleMap $script:commandModuleMap
         }
         Summary = "Search through all available commands by name, aliases, or description."
         Options = @{

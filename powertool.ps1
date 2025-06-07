@@ -1,7 +1,7 @@
 param (
     [Parameter(Mandatory=$false, Position=0)][string]$Command = "help",
-    [Parameter(Position=1)][string]$Path,
-    [Parameter(Position=2)][string]$Value,
+    [Parameter(Position=1)][string]$Value1,
+    [Parameter(Position=2)][string]$Value2,
     [int]$MinWidth = 0,
     [int]$MinHeight = 0,
     [int]$MinSize = 0,

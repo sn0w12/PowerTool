@@ -373,10 +373,10 @@ $script:ModuleCommands = @{
     "settings" = @{
         Aliases = @("config", "cfg")
         Action = {
-            if (-not $Path) {
+            if (-not $Value1) {
                 Show-Settings
             } else {
-                Show-Settings -Filter $Path
+                Show-Settings -Filter $Value1
             }
         }
         Summary = "List all settings or filter by keyword."
@@ -394,15 +394,15 @@ $script:ModuleCommands = @{
     "set" = @{
         Aliases = @("setting-set")
         Action = {
-            if (-not $Path) {
+            if (-not $Value1) {
                 Write-Host "Setting key is required. Use 'powertool settings' to see available settings." -ForegroundColor Red
                 return
             }
-            if (-not $Value) {
+            if (-not $Value2) {
                 Write-Host "Setting value is required." -ForegroundColor Red
                 return
             }
-            Set-Setting -Key $Path -Value $Value
+            Set-Setting -Key $Value1 -Value $Value2
         }
         Summary = "Set a configuration setting value."
         Options = @{
@@ -420,13 +420,13 @@ $script:ModuleCommands = @{
     "get" = @{
         Aliases = @("setting-get")
         Action = {
-            if (-not $Path) {
+            if (-not $Value1) {
                 Write-Host "Setting key is required. Use 'powertool settings' to see available settings." -ForegroundColor Red
                 return
             }
-            $value = Get-Setting -Key $Path
+            $value = Get-Setting -Key $Value1
             if ($null -ne $value) {
-                Write-Host "$Path = " -NoNewline -ForegroundColor Cyan
+                Write-Host "$Value1 = " -NoNewline -ForegroundColor Cyan
                 Write-Host $value -ForegroundColor White
             }
         }
@@ -445,10 +445,10 @@ $script:ModuleCommands = @{
     "reset" = @{
         Aliases = @("setting-reset")
         Action = {
-            if ($Path -eq "all") {
+            if ($Value1 -eq "all") {
                 Reset-Settings -All
-            } elseif ($Path) {
-                Reset-Settings -Key $Path
+            } elseif ($Value1) {
+                Reset-Settings -Key $Value1
             } else {
                 Write-Host "Specify a setting key to reset or 'all' to reset all settings." -ForegroundColor Red
             }
@@ -456,7 +456,10 @@ $script:ModuleCommands = @{
         Summary = "Reset a setting to its default value or reset all settings."
         Options = @{
             0 = @(
-                @{ Token = "key-or-all"; Type = "Argument"; Description = "The setting key to reset, or 'all' to reset everything." }
+                @{ Token = "key"; Type = "Argument"; Description = "The setting key to reset, or 'all' to reset everything." }
+            )
+            1 = @(
+                @{ Token = "all"; Type = "Argument" }
             )
         }
         Examples = @(

@@ -8,6 +8,8 @@ param (
     [switch]$Version
 )
 
+Import-Module (Join-Path $PSScriptRoot "func/help.psm1") -Force
+
 # Use current directory if no path provided for commands that need it
 if (-not $Path -and $Command.ToLower() -notin @("help", "h", "version", "v")) {
     $Path = Get-Location
@@ -173,72 +175,6 @@ function Remove-TextFromFiles($dir, $pattern) {
     }
 
     Write-Host "Processed $processedCount txt file(s), modified $modifiedCount file(s) in '$dir'" -ForegroundColor Green
-}
-
-function Show-Help {
-    param([string]$ForCommand)
-
-    $helpFilePath = Join-Path $PSScriptRoot "help.json"
-
-    if (-not (Test-Path $helpFilePath)) {
-        Write-Error "Help file not found: $helpFilePath"
-        return
-    }
-
-    try {
-        $helpContent = Get-Content -Path $helpFilePath -Raw | ConvertFrom-Json
-    }
-    catch {
-        Write-Error "Error reading or parsing help file: $($_.Exception.Message)"
-        return
-    }
-
-    # --- Logic to Display Help ---
-    if ($ForCommand) {
-        Write-Host $helpContent.preamble
-        Write-Host ""
-        $commandKey = $ForCommand.ToLower()
-
-        # Find command by name or shortcut
-        $foundCommand = $null
-        $foundCommandName = $null
-        foreach ($commandName in $helpContent.commands.PSObject.Properties.Name) {
-            $command = $helpContent.commands.$commandName
-            if ($commandName -eq $commandKey -or ($command.shortcuts -and $command.shortcuts -contains $commandKey)) {
-                $foundCommand = $command
-                $foundCommandName = $commandName
-                break
-            }
-        }
-
-        if ($foundCommand) {
-            $shortcutsText = if ($foundCommand.shortcuts) { " ($($foundCommand.shortcuts -join ', '))" } else { "" }
-            Write-Host "Command Details:"
-            Write-Host "  $($foundCommandName)$shortcutsText"
-            Write-Host "    $($foundCommand.summary)"
-            Write-Host "    Options: $($foundCommand.options)"
-            Write-Host ""
-            Write-Host "Examples:"
-            foreach ($example in $foundCommand.examples) {
-                Write-Host "  $example"
-            }
-        } else {
-            Write-Host "Unknown command: '$ForCommand'. Cannot show specific help." -ForegroundColor Red
-            Write-Host "Use 'powertool help' to see all available commands."
-        }
-    } else {
-        # Display full help
-        Write-Host $helpContent.preamble
-        Write-Host ""
-        Write-Host "Commands:"
-        foreach ($commandName in $helpContent.commands.PSObject.Properties.Name) {
-            $command = $helpContent.commands.$commandName
-            $shortcutsText = if ($command.shortcuts) { " ($($command.shortcuts -join ', '))" } else { "" }
-            $commandWithShortcuts = "$commandName$shortcutsText"
-            Write-Host "  $($commandWithShortcuts.PadRight(25)) $($command.summary)"
-            Write-Host "    Options: $($command.options)"
-        }
-    }
 }
 
 function Show-Version {

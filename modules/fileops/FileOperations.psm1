@@ -77,7 +77,12 @@ $script:ModuleCommands = @{
             Rename-FilesRandomly -dir $targetPath -recursive $useRecursive
         }
         Summary = "Rename all files in a folder with random names."
-        Options = "[path] -recursive"
+        Options = @{
+            0 = @(
+                @{ Token = "path"; Type = "OptionalArgument"; Description = "Target directory. Defaults to current location if omitted." }
+                @{ Token = "Recursive"; Type = "OptionalParameter"; Description = "Process files in subdirectories recursively." }
+            )
+        }
         Examples = @(
             "powertool rename-random",
             "powertool rr `"C:\MyFolder`"",
@@ -92,7 +97,11 @@ $script:ModuleCommands = @{
             Merge-Directory -dir $targetPath
         }
         Summary = "Move all files from subdirectories to the top level."
-        Options = "[path]"
+        Options = @{
+            0 = @(
+                @{ Token = "path"; Type = "OptionalArgument"; Description = "Target directory. Defaults to current location if omitted." }
+            )
+        }
         Examples = @(
             "powertool flatten",
             "powertool f `"C:\MyFolder`""

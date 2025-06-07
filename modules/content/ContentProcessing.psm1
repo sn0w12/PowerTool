@@ -105,7 +105,19 @@ $script:ModuleCommands = @{
             Remove-SmallImages -dir $targetPath -minWidth $effectiveMinWidth -minHeight $effectiveMinHeight
         }
         Summary = "Remove images smaller than specified dimensions."
-        Options = "[path] -MinWidth <int> -MinHeight <int> | [path] -MinSize <int>"
+        Options = @{
+            0 = @(
+                @{ Token = "path"; Type = "OptionalArgument"; Description = "Target directory. Defaults to current location." }
+                @{ Token = "MinWidth"; Type = "Parameter"; Description = "Minimum width of images to keep." }
+                @{ Token = "int"; Type = "Type"; Description = "Integer value for minimum width." }
+                @{ Token = "MinHeight"; Type = "Parameter"; Description = "Minimum height of images to keep." }
+                @{ Token = "int"; Type = "Type"; Description = "Integer value for minimum height." }
+            )
+            1 = @(
+                @{ Token = "MinSize"; Type = "Parameter"; Description = "Minimum width AND height for images to keep." }
+                @{ Token = "int"; Type = "Type"; Description = "Integer value for minimum size (applies to both width and height)." }
+            )
+        }
         Examples = @(
             "powertool filter-images -MinWidth 800 -MinHeight 600",
             "powertool fi `"C:\MyFolder`" -MinWidth 1920 -MinHeight 1080",
@@ -119,7 +131,13 @@ $script:ModuleCommands = @{
             Remove-TextFromFiles -dir $targetPath -pattern $Pattern
         }
         Summary = "Remove text from all txt files using regex pattern."
-        Options = "[path] -Pattern <regex>"
+        Options = @{
+            0 = @(
+                @{ Token = "path"; Type = "OptionalArgument"; Description = "Target directory. Defaults to current location." }
+                @{ Token = "Pattern"; Type = "Parameter"; Description = "The regular expression pattern to match text for removal." }
+                @{ Token = "regex"; Type = "Type"; Description = "A valid regex string." }
+            )
+        }
         Examples = @(
             "powertool remove-text -Pattern `"Advertisement.*?End`"",
             "powertool rt `"C:\MyFolder`" -Pattern `"\d{4}-\d{2}-\d{2}\`""

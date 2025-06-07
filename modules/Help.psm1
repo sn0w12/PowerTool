@@ -1,74 +1,75 @@
 function Write-ColoredOptions {
-    param([string]$OptionsText)
+    param([object]$OptionsData)
 
-    if (-not $OptionsText -or $OptionsText.Trim() -eq "") {
+    if (-not $OptionsData -or ($OptionsData -is [hashtable] -and $OptionsData.Count -eq 0)) {
         Write-Host "None" -ForegroundColor DarkGray
+        Write-Host "" # Ensure a newline
         return
     }
 
-    # Split by pipe (|) for multiple option sets
-    $optionSets = $OptionsText -split '\|'
+    $syntaxLines = @()
 
-    for ($i = 0; $i -lt $optionSets.Count; $i++) {
-        $optionSet = $optionSets[$i].Trim()
+    if ($OptionsData -is [hashtable]) {
+        # New numeric group format - sort by keys (0, 1, 2, etc.)
+        $sortedKeys = $OptionsData.Keys | Sort-Object { [int]$_ }
+        foreach ($key in $sortedKeys) {
+            $syntaxLines += ,$OptionsData[$key]  # Use comma operator to preserve array structure
+        }
+    } elseif ($OptionsData[0] -is [array]) {
+        # Legacy array format - convert to new format
+        $syntaxLines = $OptionsData
+    } else {
+        # Single syntax line (array of hashtables/tokens)
+        $syntaxLines = @($OptionsData)
+    }
 
-        # Parse the option set character by character
-        $j = 0
-        while ($j -lt $optionSet.Length) {
-            $char = $optionSet[$j]
+    for ($groupIndex = 0; $groupIndex -lt $syntaxLines.Count; $groupIndex++) {
+        $tokens = $syntaxLines[$groupIndex]
+        $isFirstTokenInGroup = $true
 
-            switch ($char) {
-                '[' {
-                    # Find the closing bracket
-                    $endBracket = $optionSet.IndexOf(']', $j)
-                    if ($endBracket -ne -1) {
-                        $bracketContent = $optionSet.Substring($j, $endBracket - $j + 1)
-                        Write-Host $bracketContent -NoNewline -ForegroundColor DarkCyan
-                        $j = $endBracket + 1
-                    } else {
-                        Write-Host $char -NoNewline
-                        $j++
-                    }
+        foreach ($tokenInfo in $tokens) {
+            if (-not $isFirstTokenInGroup) {
+                Write-Host " " -NoNewline # Space between tokens within the same group
+            }
+            $isFirstTokenInGroup = $false
+
+            $textToPrint = ""
+            $color = "White" # Default color
+
+            switch ($tokenInfo.Type) {
+                "Argument" {
+                    $textToPrint = "[$($tokenInfo.Token)]"
+                    $color = "DarkCyan"
                 }
-                '<' {
-                    # Find the closing angle bracket
-                    $endAngle = $optionSet.IndexOf('>', $j)
-                    if ($endAngle -ne -1) {
-                        $angleContent = $optionSet.Substring($j, $endAngle - $j + 1)
-                        Write-Host $angleContent -NoNewline -ForegroundColor DarkYellow
-                        $j = $endAngle + 1
-                    } else {
-                        Write-Host $char -NoNewline
-                        $j++
-                    }
+                "OptionalArgument" {
+                    $textToPrint = "[$($tokenInfo.Token)?]"
+                    $color = "DarkCyan"
                 }
-                '-' {
-                    # Find the parameter name (until space or < or end)
-                    $paramStart = $j
-                    $j++
-                    while ($j -lt $optionSet.Length -and $optionSet[$j] -notin @(' ', '<')) {
-                        $j++
-                    }
-                    $paramName = $optionSet.Substring($paramStart, $j - $paramStart)
-                    Write-Host $paramName -NoNewline -ForegroundColor Green
+                "Parameter" {
+                    $textToPrint = "-$($tokenInfo.Token)"
+                    $color = "Green"
                 }
-                ' ' {
-                    Write-Host $char -NoNewline
-                    $j++
+                "OptionalParameter" {
+                    $textToPrint = "-$($tokenInfo.Token)?"
+                    $color = "Green"
                 }
-                default {
-                    Write-Host $char -NoNewline
-                    $j++
+                "Type" {
+                    $textToPrint = "<$($tokenInfo.Token)>"
+                    $color = "DarkYellow"
+                }
+                default { # Should not happen with proper definitions
+                    $textToPrint = $tokenInfo.Token
                 }
             }
+            Write-Host $textToPrint -NoNewline -ForegroundColor $color
         }
 
-        # Add pipe separator between option sets
-        if ($i -lt $optionSets.Count - 1) {
+        # Only add pipe separator between different groups (not after the last group)
+        if ($syntaxLines.Count -gt 1 -and $groupIndex -lt $syntaxLines.Count - 1) {
             Write-Host " | " -NoNewline -ForegroundColor DarkGray
         }
     }
-    Write-Host "" # Ensure a newline after options are printed
+    Write-Host "" # Ensure a newline after all options are printed
 }
 
 function Write-Header {
@@ -177,7 +178,7 @@ function Show-Help {
             Write-Host $shortcutsText -ForegroundColor Yellow
             Write-Host "    $($foundCommandDetails.Summary)" -ForegroundColor White
             Write-Host "    Options: " -NoNewline -ForegroundColor White
-            Write-ColoredOptions -OptionsText $foundCommandDetails.Options
+            Write-ColoredOptions -OptionsData $foundCommandDetails.Options
             Write-Host ""
             Write-Host "Examples:" -ForegroundColor Blue
             if ($foundCommandDetails.Examples -is [array]) {
@@ -244,7 +245,7 @@ function Show-Help {
                 }
                 Write-Host $command.Summary -ForegroundColor White
                 Write-Host "      Options: " -NoNewline -ForegroundColor White
-                Write-ColoredOptions -OptionsText $command.Options
+                Write-ColoredOptions -OptionsData $command.Options
             }
         }
     }
@@ -331,9 +332,40 @@ function Search-Commands {
         }
 
         # Options contains search term
-        if ($command.Options -and $command.Options.ToLower().Contains($searchTerm)) {
-            $relevanceScore += 10
-            $isMatch = $true
+        if ($command.Options) {
+            $optionsStringForSearch = ""
+
+            if ($command.Options -is [hashtable]) {
+                # New numeric group format
+                $sortedKeys = $command.Options.Keys | Sort-Object { [int]$_ }
+                foreach ($key in $sortedKeys) {
+                    $line = $command.Options[$key]
+                    foreach ($tokenInfo in $line) {
+                        $optionsStringForSearch += $tokenInfo.Token + " "
+                        if ($tokenInfo.Description) {
+                            $optionsStringForSearch += $tokenInfo.Description + " "
+                        }
+                    }
+                    $optionsStringForSearch += "| "
+                }
+            } else {
+                # Legacy format handling
+                $syntaxLinesToSearch = if ($command.Options[0] -is [array]) { $command.Options } else { @($command.Options) }
+                foreach ($line in $syntaxLinesToSearch) {
+                    foreach ($tokenInfo in $line) {
+                        $optionsStringForSearch += $tokenInfo.Token + " "
+                        if ($tokenInfo.Description) {
+                            $optionsStringForSearch += $tokenInfo.Description + " "
+                        }
+                    }
+                    $optionsStringForSearch += "| "
+                }
+            }
+
+            if ($optionsStringForSearch.ToLower().Contains($searchTerm)) {
+                $relevanceScore += 10
+                $isMatch = $true
+            }
         }
 
         if ($isMatch) {
@@ -385,7 +417,7 @@ function Search-Commands {
 
         Write-Host $command.Summary -ForegroundColor White
         Write-Host "    Options: " -NoNewline -ForegroundColor White
-        Write-ColoredOptions -OptionsText $command.Options
+        Write-ColoredOptions -OptionsData $command.Options
     }
 }
 
@@ -398,7 +430,11 @@ $script:ModuleCommands = @{
             Show-Help -ForCommand $Path -AllCommandData $script:commandDefinitions -CommandModuleMap $script:commandModuleMap
         }
         Summary = "Show this help message or help for a specific command."
-        Options = "[command-name]"
+        Options = @{
+            0 = @(
+                @{ Token = "command-name"; Type = "OptionalArgument"; Description = "The name of the command to get help for." }
+            )
+        }
         Examples = @(
             "powertool help rename-random",
             "powertool help filter-images"
@@ -410,7 +446,11 @@ $script:ModuleCommands = @{
             Search-Commands -SearchTerm $Path -AllCommandData $script:commandDefinitions -CommandModuleMap $script:commandModuleMap
         }
         Summary = "Search through all available commands by name, aliases, or description."
-        Options = "[search-term]"
+        Options = @{
+            0 = @(
+                @{ Token = "search-term"; Type = "Argument"; Description = "The term to search for in commands, aliases, summaries, or options." }
+            )
+        }
         Examples = @(
             "powertool search image",
             "powertool find rename",
@@ -421,7 +461,7 @@ $script:ModuleCommands = @{
         Aliases = @("v", "ver")
         Action = { Show-Version -version $version }
         Summary = "Show the current version of PowerTool."
-        Options = ""
+        Options = @{} # No options - empty hashtable
         Examples = @(
             "powertool version",
             "powertool v"

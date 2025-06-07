@@ -94,6 +94,7 @@ $script:ModuleCommands = @{
     "filter-images" = @{
         Aliases = @("fi")
         Action = {
+            $targetPath = Get-TargetPath -Path $Path
             $effectiveMinWidth = if ($MinSize -gt 0) { $MinSize } else { $MinWidth }
             $effectiveMinHeight = if ($MinSize -gt 0) { $MinSize } else { $MinHeight }
 
@@ -101,7 +102,7 @@ $script:ModuleCommands = @{
                 Write-Error "Please specify either -MinSize or both -MinWidth and -MinHeight parameters"
                 return
             }
-            Remove-SmallImages -dir $Path -minWidth $effectiveMinWidth -minHeight $effectiveMinHeight
+            Remove-SmallImages -dir $targetPath -minWidth $effectiveMinWidth -minHeight $effectiveMinHeight
         }
         Summary = "Remove images smaller than specified dimensions."
         Options = "[path] -MinWidth <int> -MinHeight <int> | [path] -MinSize <int>"
@@ -113,7 +114,10 @@ $script:ModuleCommands = @{
     }
     "remove-text" = @{
         Aliases = @("rt")
-        Action = { Remove-TextFromFiles -dir $Path -pattern $Pattern }
+        Action = {
+            $targetPath = Get-TargetPath -Path $Path
+            Remove-TextFromFiles -dir $targetPath -pattern $Pattern
+        }
         Summary = "Remove text from all txt files using regex pattern."
         Options = "[path] -Pattern <regex>"
         Examples = @(

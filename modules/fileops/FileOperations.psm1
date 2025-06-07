@@ -71,7 +71,10 @@ function Merge-Directory($dir) {
 $script:ModuleCommands = @{
     "rename-random" = @{
         Aliases = @("rr")
-        Action = { Rename-FilesRandomly -dir $Path }
+        Action = {
+            $targetPath = Get-TargetPath -Path $Path
+            Rename-FilesRandomly -dir $targetPath
+        }
         Summary = "Rename all files in a folder with random names."
         Options = "[path]"
         Examples = @(
@@ -81,7 +84,10 @@ $script:ModuleCommands = @{
     }
     "rename-random-recursive" = @{
         Aliases = @("rrr")
-        Action = { Rename-FilesRandomly -dir $Path -recursive $true }
+        Action = {
+            $targetPath = Get-TargetPath -Path $Path
+            Rename-FilesRandomly -dir $targetPath -recursive $true
+        }
         Summary = "Rename all files recursively in subfolders with random names."
         Options = "[path]"
         Examples = @(
@@ -91,7 +97,10 @@ $script:ModuleCommands = @{
     }
     "flatten" = @{
         Aliases = @("f")
-        Action = { Merge-Directory -dir $Path }
+        Action = {
+            $targetPath = Get-TargetPath -Path $Path
+            Merge-Directory -dir $targetPath
+        }
         Summary = "Move all files from subdirectories to the top level."
         Options = "[path]"
         Examples = @(

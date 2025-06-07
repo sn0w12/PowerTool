@@ -15,7 +15,6 @@ $modules = @(
     "modules/content/ContentProcessing.psm1"
 )
 
-# CommandDefinitions will store all commands from all modules
 $script:commandDefinitions = @{}
 $script:commandModuleMap = @{}
 

@@ -75,4 +75,12 @@ function Get-LevenshteinDistance {
     }
 }
 
-Export-ModuleMember -Function Get-LevenshteinDistance
+function Get-TargetPath($Path) {
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return Get-Location
+    } else {
+        return $Path
+    }
+}
+
+Export-ModuleMember -Function Get-LevenshteinDistance, Get-TargetPath

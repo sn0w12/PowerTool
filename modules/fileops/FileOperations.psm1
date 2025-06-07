@@ -68,4 +68,19 @@ function Merge-Directory($dir) {
     Write-Host "Moved $movedCount file(s) to top level and removed $removedDirs empty folder(s) from '$dir'" -ForegroundColor Green
 }
 
-Export-ModuleMember -Function Rename-FilesRandomly, Merge-Directory
+$script:ModuleCommands = @{
+    "rename-random" = @{
+        Aliases = @("rr")
+        Action = { Rename-FilesRandomly -dir $Path }
+    }
+    "rename-random-recursive" = @{
+        Aliases = @("rrr")
+        Action = { Rename-FilesRandomly -dir $Path -recursive $true }
+    }
+    "flatten" = @{
+        Aliases = @("f")
+        Action = { Merge-Directory -dir $Path }
+    }
+}
+
+Export-ModuleMember -Function Rename-FilesRandomly, Merge-Directory -Variable ModuleCommands

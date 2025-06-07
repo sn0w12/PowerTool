@@ -150,4 +150,20 @@ function Show-Help {
     }
 }
 
-Export-ModuleMember -Function Show-Help, Write-ColoredOptions
+function Show-Version {
+    $version = "0.1.0"
+    Write-Host "PowerTool v$version" -ForegroundColor Cyan
+}
+
+$script:ModuleCommands = @{
+    "version" = @{
+        Aliases = @("v")
+        Action = { Show-Version }
+    }
+    "help" = @{
+        Aliases = @("h")
+        Action = { Show-Help -ForCommand $Path }
+    }
+}
+
+Export-ModuleMember -Function Show-Help, Write-ColoredOptions, Show-Version -Variable ModuleCommands

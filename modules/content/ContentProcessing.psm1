@@ -90,4 +90,24 @@ function Remove-TextFromFiles($dir, $pattern) {
     Write-Host "Processed $processedCount txt file(s), modified $modifiedCount file(s) in '$dir'" -ForegroundColor Green
 }
 
-Export-ModuleMember -Function Remove-SmallImages, Remove-TextFromFiles
+$script:ModuleCommands = @{
+    "filter-images" = @{
+        Aliases = @("fi")
+        Action = {
+            $effectiveMinWidth = if ($MinSize -gt 0) { $MinSize } else { $MinWidth }
+            $effectiveMinHeight = if ($MinSize -gt 0) { $MinSize } else { $MinHeight }
+
+            if ($effectiveMinWidth -eq 0 -or $effectiveMinHeight -eq 0) {
+                Write-Error "Please specify either -MinSize or both -MinWidth and -MinHeight parameters"
+                return
+            }
+            Remove-SmallImages -dir $Path -minWidth $effectiveMinWidth -minHeight $effectiveMinHeight
+        }
+    }
+    "remove-text" = @{
+        Aliases = @("rt")
+        Action = { Remove-TextFromFiles -dir $Path -pattern $Pattern }
+    }
+}
+
+Export-ModuleMember -Function Remove-SmallImages, Remove-TextFromFiles -Variable ModuleCommands

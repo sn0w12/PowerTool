@@ -8,53 +8,87 @@ param (
     [switch]$Version
 )
 
-Import-Module (Join-Path $PSScriptRoot "modules/Help.psm1") -Force
-Import-Module (Join-Path $PSScriptRoot "modules/fileops/FileOperations.psm1") -Force
-Import-Module (Join-Path $PSScriptRoot "modules/content/ContentProcessing.psm1") -Force
+$modules = @(
+    "modules/Help.psm1",
+    "modules/Util.psm1",
+    "modules/fileops/FileOperations.psm1",
+    "modules/content/ContentProcessing.psm1"
+)
 
-# Use current directory if no path provided for commands that need it
-if (-not $Path -and $Command.ToLower() -notin @("help", "h", "version", "v")) {
-    $Path = Get-Location
-}
+# CommandDefinitions will store all commands from all modules
+$commandDefinitions = @{}
+foreach ($modulePathString in $modules) {
+    # Use -PassThru to get the module object directly. -Force ensures it reloads.
+    # -ErrorAction SilentlyContinue to handle if a module fails to import
+    $loadedModule = Import-Module (Join-Path $PSScriptRoot $modulePathString) -Force -PassThru -ErrorAction SilentlyContinue
 
-function Show-Version {
-    $version = "0.1.0"
+    if ($loadedModule) {
+        if ($loadedModule.ExportedVariables.ContainsKey('ModuleCommands')) {
+            $moduleCommandsInfo = $loadedModule.ExportedVariables['ModuleCommands']
+            # Get the actual value of the 'ModuleCommands' variable
+            $moduleCommandsValue = $moduleCommandsInfo.Value
 
-    Write-Host "PowerTool v$version" -ForegroundColor Cyan
-}
-
-switch ($Command.ToLower()) {
-    { $_ -in @("rename-random", "rr") } {
-        Rename-FilesRandomly -dir $Path
-    }
-    { $_ -in @("rename-random-recursive", "rrr") } {
-        Rename-FilesRandomly -dir $Path -recursive $true
-    }
-    { $_ -in @("flatten", "f") } {
-        Merge-Directory -dir $Path
-    }
-    { $_ -in @("filter-images", "fi") } {
-        # Use MinSize for both dimensions if provided, otherwise use individual parameters
-        $effectiveMinWidth = if ($MinSize -gt 0) { $MinSize } else { $MinWidth }
-        $effectiveMinHeight = if ($MinSize -gt 0) { $MinSize } else { $MinHeight }
-
-        if ($effectiveMinWidth -eq 0 -or $effectiveMinHeight -eq 0) {
-            Write-Error "Please specify either -MinSize or both -MinWidth and -MinHeight parameters"
-            return
+            if ($null -ne $moduleCommandsValue) {
+                if ($moduleCommandsValue.GetType().Name -eq "Hashtable") {
+                    foreach ($key in $moduleCommandsValue.Keys) {
+                        $commandDefinitions[$key] = $moduleCommandsValue[$key]
+                    }
+                }
+            }
         }
-        Remove-SmallImages -dir $Path -minWidth $effectiveMinWidth -minHeight $effectiveMinHeight
     }
-    { $_ -in @("remove-text", "rt") } {
-        Remove-TextFromFiles -dir $Path -pattern $Pattern
+}
+
+$availableCommands = $commandDefinitions.Keys
+
+$matchedCommand = $null
+$inputCommand = $Command.ToLower()
+Write-Host "DEBUG: User input command: '$inputCommand'" -ForegroundColor DarkCyan
+
+foreach ($cmdKey in $commandDefinitions.Keys) {
+    $commandEntry = $commandDefinitions[$cmdKey]
+    # Ensure Aliases property exists and is not null before trying to use it
+    $aliases = @()
+    if ($commandEntry -is [hashtable] -and $commandEntry.ContainsKey('Aliases') -and $null -ne $commandEntry.Aliases) {
+        $aliases = $commandEntry.Aliases
     }
-    { $_ -in @("version", "v") } {
-        Show-Version
+
+    $allVariants = @($cmdKey) + $aliases
+    Write-Host "DEBUG: Checking against command '$cmdKey', Aliases: $($aliases -join ', ')" -ForegroundColor Gray
+    if ($inputCommand -in $allVariants) {
+        $matchedCommand = $cmdKey
+        Write-Host "DEBUG: Matched command: '$matchedCommand'" -ForegroundColor Green
+        break
     }
-    { $_ -in @("help", "h") } {
-        Show-Help -ForCommand $Path
+}
+
+if ($matchedCommand) {
+    Write-Host "DEBUG: Executing action for command: '$matchedCommand'" -ForegroundColor DarkCyan
+    & $commandDefinitions[$matchedCommand].Action
+} else {
+    Write-Host "Unknown command: '$Command'" -ForegroundColor Red
+
+    $suggestions = @()
+    foreach ($cmdSugg in $availableCommands) {
+        if ($null -ne $cmdSugg -and $cmdSugg -is [string]) {
+            $distance = Get-LevenshteinDistance $inputCommand $cmdSugg
+            $maxLength = [Math]::Max($inputCommand.Length, $cmdSugg.Length)
+            if ($maxLength -gt 0) {
+                 $similarity = 1 - ($distance / $maxLength)
+                 if ($similarity -gt 0.6 -or $cmdSugg.Contains($inputCommand) -or $inputCommand.Contains($cmdSugg)) {
+                    $suggestions += $cmdSugg
+                }
+            } elseif ($inputCommand -eq $cmdSugg) {
+                 $suggestions += $cmdSugg
+            }
+        }
     }
-    default {
-        Write-Host "Unknown command: '$Command'" -ForegroundColor Red
-        Show-Help
+
+    if ($suggestions.Count -gt 0) {
+        Write-Host "Did you mean one of these?" -ForegroundColor Yellow
+        $suggestions | Sort-Object | Get-Unique | ForEach-Object {
+            Write-Host "  $($_)" -ForegroundColor Green
+        }
     }
+    Write-Host "Use 'powertool help' to see all available commands." -ForegroundColor White
 }

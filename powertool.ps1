@@ -4,10 +4,10 @@ param (
     [int]$MinWidth = 0,
     [int]$MinHeight = 0,
     [int]$MinSize = 0,
-    [string]$Pattern,
-    [switch]$Version
+    [string]$Pattern
 )
 
+$script:version = "0.1.0"
 $modules = @(
     "modules/Help.psm1",
     "modules/Util.psm1",

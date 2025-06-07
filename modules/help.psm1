@@ -251,7 +251,9 @@ function Show-Help {
 }
 
 function Show-Version {
-    $version = "0.1.0"
+    param(
+        [string]$version
+    )
     Write-Host "PowerTool" -ForegroundColor Cyan -NoNewline
     Write-Host " v$version"
 }
@@ -417,7 +419,7 @@ $script:ModuleCommands = @{
     }
     "version" = @{
         Aliases = @("v", "ver")
-        Action = { Show-Version }
+        Action = { Show-Version -version $version }
         Summary = "Show the current version of PowerTool."
         Options = ""
         Examples = @(

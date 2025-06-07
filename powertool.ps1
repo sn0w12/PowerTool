@@ -37,7 +37,7 @@ function Rename-FilesRandomly($dir, $recursive = $false) {
     Write-Host "Renamed $($files.Count) file(s) in '$dir'" -ForegroundColor Green
 }
 
-function Flatten-Directory($dir) {
+function Merge-Directory($dir) {
     # Resolve the full path
     $resolvedPath = Resolve-Path $dir -ErrorAction SilentlyContinue
     if (-not $resolvedPath) {
@@ -82,7 +82,7 @@ function Flatten-Directory($dir) {
     Write-Host "Moved $movedCount file(s) to top level and removed $removedDirs empty folder(s) from '$dir'" -ForegroundColor Green
 }
 
-function Filter-SmallImages($dir, $minWidth, $minHeight) {
+function Remove-SmallImages($dir, $minWidth, $minHeight) {
     # Resolve the full path
     $resolvedPath = Resolve-Path $dir -ErrorAction SilentlyContinue
     if (-not $resolvedPath) {
@@ -240,7 +240,7 @@ switch ($Command.ToLower()) {
         Rename-FilesRandomly -dir $Path -recursive $true
     }
     "flatten" {
-        Flatten-Directory -dir $Path
+        Merge-Directory -dir $Path
     }
     "filter-images" {
         # Use MinSize for both dimensions if provided, otherwise use individual parameters
@@ -251,7 +251,7 @@ switch ($Command.ToLower()) {
             Write-Error "Please specify either -MinSize or both -MinWidth and -MinHeight parameters"
             return
         }
-        Filter-SmallImages -dir $Path -minWidth $effectiveMinWidth -minHeight $effectiveMinHeight
+        Remove-SmallImages -dir $Path -minWidth $effectiveMinWidth -minHeight $effectiveMinHeight
     }
     "remove-text" {
         Remove-TextFromFiles -dir $Path -pattern $Pattern

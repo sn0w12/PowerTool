@@ -405,7 +405,7 @@ $script:ModuleCommands = @{
         )
     }
     "search" = @{
-        Aliases = @("find", "f")
+        Aliases = @("find", "s")
         Action = {
             Search-Commands -SearchTerm $Path -AllCommandData $script:commandDefinitions -CommandModuleMap $script:commandModuleMap
         }

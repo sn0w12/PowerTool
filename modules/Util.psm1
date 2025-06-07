@@ -79,7 +79,13 @@ function Get-TargetPath($Path) {
     if ([string]::IsNullOrWhiteSpace($Path)) {
         return Get-Location
     } else {
-        return $Path
+        # Check if the path is already absolute (has drive letter or UNC path)
+        if ([System.IO.Path]::IsPathRooted($Path)) {
+            return $Path
+        } else {
+            # For relative paths, combine with current location
+            return Join-Path (Get-Location) $Path
+        }
     }
 }
 

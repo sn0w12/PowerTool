@@ -188,7 +188,7 @@ $script:ModuleCommands = @{
     "rename-random" = @{
         Aliases = @("rr")
         Action = {
-            $targetPath = Get-TargetPath -InputPath $Value1
+            $targetPath = Get-TargetPath $Value1
             $useRecursive = $PSBoundParameters.ContainsKey('Recursive') -and $Recursive
             Rename-FilesRandomly -dir $targetPath -recursive $useRecursive
         }
@@ -209,7 +209,7 @@ $script:ModuleCommands = @{
     "flatten" = @{
         Aliases = @("f")
         Action = {
-            $targetPath = Get-TargetPath -InputPath $Value1
+            $targetPath = Get-TargetPath $Value1
             Merge-Directory -dir $targetPath
         }
         Summary = "Move all files from subdirectories to the top level."
@@ -226,7 +226,7 @@ $script:ModuleCommands = @{
     "tree" = @{
         Aliases = @("tr")
         Action = {
-            $targetPath = Get-TargetPath -InputPath $Value1
+            $targetPath = Get-TargetPath $Value1
             $depth = if ($Value2 -and $Value2 -match '^\d+$') { [int]$Value2 } else { $null }
             Show-DirectoryTree -dir $targetPath -maxDepth $depth
         }

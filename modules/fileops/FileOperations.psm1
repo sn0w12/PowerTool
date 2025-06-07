@@ -105,6 +105,85 @@ function Merge-Directory($dir) {
     Write-Host "Moved $movedCount file(s) to top level and removed $removedDirs empty folder(s) from '$dir'" -ForegroundColor Green
 }
 
+function Show-TreeRecursive($path, $prefix = "", $depth = 0, $verboseMode = $false, $maxDepth = $null) {
+    if ($maxDepth -and $depth -gt $maxDepth) {
+        return
+    }
+
+    try {
+        $items = Get-ChildItem -Path $path -ErrorAction Stop | Sort-Object @{Expression={$_.PSIsContainer}; Descending=$true}, Name
+
+        for ($i = 0; $i -lt $items.Count; $i++) {
+            $item = $items[$i]
+            $isLast = ($i -eq ($items.Count - 1))
+
+            $connector = if ($isLast) { "+-- " } else { "|-- " }
+            $itemName = $item.Name
+
+            if ($item.PSIsContainer) {
+                Write-Host "$prefix$connector" -NoNewline -ForegroundColor DarkGray
+                Write-Host $itemName -ForegroundColor Yellow
+
+                if ($isLast) {
+                    $newPrefix = $prefix + "    "
+                } else {
+                    $newPrefix = $prefix + "|   "
+                }
+
+                Show-TreeRecursive -path $item.FullName -prefix $newPrefix -depth ($depth + 1) -verboseMode $verboseMode -maxDepth $maxDepth
+            } else {
+                Write-Host "$prefix$connector" -NoNewline -ForegroundColor DarkGray
+                Write-Host $itemName -ForegroundColor White
+
+                if ($verboseMode) {
+                    if ($item.Length -lt 1KB) {
+                        $size = "$($item.Length)B"
+                    } elseif ($item.Length -lt 1MB) {
+                        $size = "{0:N1}KB" -f ($item.Length / 1KB)
+                    } elseif ($item.Length -lt 1GB) {
+                        $size = "{0:N1}MB" -f ($item.Length / 1MB)
+                    } else {
+                        $size = "{0:N1}GB" -f ($item.Length / 1GB)
+                    }
+                    Write-Host " ($size)" -ForegroundColor DarkGray
+                }
+            }
+        }
+    }
+    catch [System.UnauthorizedAccessException] {
+        Write-Host "$prefix+-- " -NoNewline -ForegroundColor DarkGray
+        Write-Host "[Access Denied]" -ForegroundColor Red
+    }
+    catch [System.IO.DirectoryNotFoundException] {
+        Write-Host "$prefix+-- " -NoNewline -ForegroundColor DarkGray
+        Write-Host "[Directory Not Found]" -ForegroundColor Red
+    }
+    catch {
+        Write-Host "$prefix+-- " -NoNewline -ForegroundColor DarkGray
+        Write-Host "[Error: $($_.Exception.Message)]" -ForegroundColor Red
+        if ($verboseMode) {
+            Write-Host "$prefix    Exception Type: $($_.Exception.GetType().Name)" -ForegroundColor DarkRed
+        }
+    }
+}
+
+function Show-DirectoryTree($dir, $maxDepth = $null) {
+    $resolvedPath = Resolve-Path $dir -ErrorAction SilentlyContinue
+    if (-not $resolvedPath) {
+        Write-Error "Directory not found: $dir"
+        return
+    }
+
+    $dir = $resolvedPath.Path
+    $verboseMode = Get-Setting -Key "core.verbose"
+
+    Write-Host "Directory tree for: " -NoNewline -ForegroundColor Blue
+    Write-Host $dir -ForegroundColor Cyan
+    Write-Host ""
+
+    Show-TreeRecursive -path $dir -verboseMode $verboseMode -maxDepth $maxDepth
+}
+
 $script:ModuleCommands = @{
     "rename-random" = @{
         Aliases = @("rr")
@@ -144,6 +223,27 @@ $script:ModuleCommands = @{
             "powertool f `"C:\MyFolder`""
         )
     }
+    "tree" = @{
+        Aliases = @("tr")
+        Action = {
+            $targetPath = Get-TargetPath -InputPath $Value1
+            $depth = if ($Value2 -and $Value2 -match '^\d+$') { [int]$Value2 } else { $null }
+            Show-DirectoryTree -dir $targetPath -maxDepth $depth
+        }
+        Summary = "Display directory structure in a tree format."
+        Options = @{
+            0 = @(
+                @{ Token = "path"; Type = "OptionalArgument"; Description = "Target directory. Defaults to current location if omitted." }
+                @{ Token = "maxDepth"; Type = "OptionalArgument"; Description = "Maximum depth to display. Unlimited if omitted." }
+            )
+        }
+        Examples = @(
+            "powertool tree",
+            "powertool tr `"C:\MyFolder`"",
+            "powertool tree . 3",
+            "powertool tr `"C:\Projects`" 2"
+        )
+    }
 }
 
-Export-ModuleMember -Function Rename-FilesRandomly, Merge-Directory -Variable ModuleCommands
+Export-ModuleMember -Function Rename-FilesRandomly, Merge-Directory, Show-DirectoryTree -Variable ModuleCommands

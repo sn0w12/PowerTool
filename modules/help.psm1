@@ -86,7 +86,7 @@ function Write-UsageSection {
     Write-Host " " -NoNewline
     Write-Host "[input]" -NoNewline -ForegroundColor DarkCyan
     Write-Host " " -NoNewline
-    Write-Host "[options]" -ForegroundColor Gray
+    Write-Host "[options]" -ForegroundColor Green
 
     Write-Host "  " -NoNewline
     Write-Host "pt" -NoNewline -ForegroundColor Yellow
@@ -95,7 +95,7 @@ function Write-UsageSection {
     Write-Host " " -NoNewline
     Write-Host "[input]" -NoNewline -ForegroundColor DarkCyan
     Write-Host " " -NoNewline
-    Write-Host "[options]" -ForegroundColor Gray
+    Write-Host "[options]" -ForegroundColor Green
 }
 
 function Write-ColoredExample {

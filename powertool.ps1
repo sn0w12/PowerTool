@@ -87,12 +87,12 @@ if ($matchedCommand) {
             $distance = Get-LevenshteinDistance $inputCommand $cmdSugg
             $maxLength = [Math]::Max($inputCommand.Length, $cmdSugg.Length)
             if ($maxLength -gt 0) {
-                 $similarity = 1 - ($distance / $maxLength)
-                 if ($similarity -gt 0.6 -or $cmdSugg.Contains($inputCommand) -or $inputCommand.Contains($cmdSugg)) {
+                $similarity = 1 - ($distance / $maxLength)
+                if ($similarity -gt 0.6 -or $cmdSugg.Contains($inputCommand) -or $inputCommand.Contains($cmdSugg)) {
                     $suggestions += $cmdSugg
                 }
             } elseif ($inputCommand -eq $cmdSugg) {
-                 $suggestions += $cmdSugg
+                $suggestions += $cmdSugg
             }
         }
     }

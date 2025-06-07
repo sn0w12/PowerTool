@@ -10,6 +10,12 @@
                 "powertool help filter-images"
             ]
         },
+        "version": {
+            "summary": "Show the current version of PowerTool.",
+            "shortcuts": ["v"],
+            "options": "",
+            "examples": ["powertool version", "powertool v"]
+        },
         "rename-random": {
             "summary": "Rename all files in a folder with random names.",
             "shortcuts": ["rr"],

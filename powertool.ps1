@@ -221,14 +221,6 @@ function Show-Help {
             Write-Host "  $($commandName.PadRight(25)) $($command.summary)"
             Write-Host "    Options: $($command.options)"
         }
-        Write-Host ""
-        Write-Host "Examples:"
-        foreach ($commandName in $helpContent.commands.PSObject.Properties.Name) {
-            $examples = $helpContent.commands.$commandName.examples
-            if ($examples.Count -gt 0) {
-                Write-Host "  $($examples[0])"
-            }
-        }
     }
 }
 

@@ -212,7 +212,8 @@ function Show-Help {
 
 function Show-Version {
     $version = "0.1.0" # Consider making this configurable or part of module data
-    Write-Host "PowerTool v$version" -ForegroundColor Cyan
+    Write-Host "PowerTool" -ForegroundColor Cyan -NoNewline
+    Write-Host " v$version"
 }
 
 $script:ModuleCommands = @{

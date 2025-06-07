@@ -1,6 +1,14 @@
 {
     "preamble": "PowerTool - Utility CLI for Windows\n\nUsage:\n  powertool <command> [input] [options]\n  pt <command> [input] [options]",
     "commands": {
+        "help": {
+            "summary": "Show this help message or help for a specific command.",
+            "options": "[command-name]",
+            "examples": [
+                "powertool help rename-random",
+                "powertool help filter-images"
+            ]
+        },
         "rename-random": {
             "summary": "Rename all files in a folder with random names.",
             "options": "[path]",
@@ -41,14 +49,6 @@
             "examples": [
                 "powertool remove-text -Pattern \"Advertisement.*?End\"",
                 "powertool remove-text \"C:\\MyFolder\" -Pattern \"\\d{4}-\\d{2}-\\d{2}\""
-            ]
-        },
-        "help": {
-            "summary": "Show this help message or help for a specific command.",
-            "options": "[command-name]",
-            "examples": [
-                "powertool help rename-random",
-                "powertool help filter-images"
             ]
         }
     }

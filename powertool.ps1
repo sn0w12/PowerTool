@@ -5,6 +5,7 @@ param (
     [int]$MinWidth = 0,
     [int]$MinHeight = 0,
     [int]$MinSize = 0,
+    [string]$Pattern,
     [switch]$Recursive
 )
 

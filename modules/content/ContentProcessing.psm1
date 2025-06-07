@@ -175,18 +175,19 @@ $script:ModuleCommands = @{
         Aliases = @("rt")
         Action = {
             $targetPath = Get-TargetPath $Value1
-            Remove-TextFromFiles -dir $targetPath -pattern $Value2
+            Remove-TextFromFiles -dir $targetPath -pattern $Pattern
         }
         Summary = "Remove text from all txt files using regex pattern."
         Options = @{
             0 = @(
                 @{ Token = "path"; Type = "OptionalArgument"; Description = "Target directory. Defaults to current location." }
-                @{ Token = "pattern"; Type = "Argument"; Description = "The regular expression pattern to match text for removal." }
+                @{ Token = "Pattern"; Type = "Parameter"; Description = "The regular expression pattern to match text for removal." }
+                @{ Token = "regex"; Type = "Type"; Description = "A valid regex string." }
             )
         }
         Examples = @(
-            "powertool remove-text `"Advertisement.*?End`"",
-            "powertool rt `"C:\MyFolder`" `"\d{4}-\d{2}-\d{2}\`""
+            "powertool remove-text -Pattern `"Advertisement.*?End`"",
+            "powertool rt `"C:\MyFolder`" -Pattern `"\d{4}-\d{2}-\d{2}\`""
         )
     }
 }

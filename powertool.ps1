@@ -30,43 +30,48 @@ $script:settings = $null
 foreach ($modulePathString in $modules) {
     # Use -PassThru to get the module object directly. -Force ensures it reloads.
     # -ErrorAction SilentlyContinue to handle if a module fails to import
-    $loadedModule = Import-Module (Join-Path $PSScriptRoot $modulePathString) -Force -PassThru -ErrorAction SilentlyContinue
+    try {
+        $loadedModule = Import-Module (Join-Path $PSScriptRoot $modulePathString) -Force -PassThru
 
-    if ($loadedModule) {
-        # Initialize settings if this is the Settings module
-        if ($modulePathString -like "*Settings.psm1") {
-            $script:settings = & $loadedModule { Get-AllSettings }
-        }
+        if ($loadedModule) {
+            # Initialize settings if this is the Settings module
+            if ($modulePathString -like "*Settings.psm1") {
+                $script:settings = & $loadedModule { Get-AllSettings }
+            }
 
-        if ($loadedModule.ExportedVariables.ContainsKey('ModuleCommands')) {
-            $moduleCommandsInfo = $loadedModule.ExportedVariables['ModuleCommands']
-            # Get the actual value of the 'ModuleCommands' variable
-            $moduleCommandsValue = $moduleCommandsInfo.Value
+            if ($loadedModule.ExportedVariables.ContainsKey('ModuleCommands')) {
+                $moduleCommandsInfo = $loadedModule.ExportedVariables['ModuleCommands']
+                # Get the actual value of the 'ModuleCommands' variable
+                $moduleCommandsValue = $moduleCommandsInfo.Value
 
-            if ($null -ne $moduleCommandsValue) {
-                if ($moduleCommandsValue.GetType().Name -eq "Hashtable") {
-                    # Extract module name from path for display
-                    $moduleName = (Split-Path $modulePathString -Leaf) -replace '\.psm1$', ''
+                if ($null -ne $moduleCommandsValue) {
+                    if ($moduleCommandsValue.GetType().Name -eq "Hashtable") {
+                        # Extract module name from path for display
+                        $moduleName = (Split-Path $modulePathString -Leaf) -replace '\.psm1$', ''
 
-                    foreach ($key in $moduleCommandsValue.Keys) {
-                        $commandEntry = $moduleCommandsValue[$key]
-                        if ($script:commandDefinitions.ContainsKey($key)) {
-                            $existingModule = $script:commandModuleMap[$key]
-                            Write-Warning "Duplicate command '$key' found in module '$moduleName'. Previously defined in module '$existingModule'. The new definition will override the previous one."
+                        foreach ($key in $moduleCommandsValue.Keys) {
+                            $commandEntry = $moduleCommandsValue[$key]
+                            if ($script:commandDefinitions.ContainsKey($key)) {
+                                $existingModule = $script:commandModuleMap[$key]
+                                Write-Warning "Duplicate command '$key' found in module '$moduleName'. Previously defined in module '$existingModule'. The new definition will override the previous one."
+                            }
+
+                            $script:commandDefinitions[$key] = $commandEntry
+                            $script:commandModuleMap[$key] = $moduleName
                         }
-
-                        $script:commandDefinitions[$key] = $commandEntry
-                        $script:commandModuleMap[$key] = $moduleName
+                    } else {
+                        Write-Warning "ModuleCommands exported by '$modulePathString' is not a Hashtable."
                     }
-                } else {
-                    Write-Warning "ModuleCommands exported by '$modulePathString' is not a Hashtable."
                 }
+            } else {
+                # Module does not export 'ModuleCommands', which is fine.
             }
         } else {
-            # Module does not export 'ModuleCommands', which is fine.
+            Write-Warning "Failed to load module: $modulePathString"
         }
-    } else {
-        Write-Warning "Failed to load module: $modulePathString"
+    } catch {
+        Write-Host $_.Exception.Message -ForegroundColor Red
+        Write-Host $_.ScriptStackTrace -ForegroundColor Yellow
     }
 }
 

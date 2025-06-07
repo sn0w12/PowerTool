@@ -1,10 +1,5 @@
-# PowerTool Settings Module
-# Provides centralized settings management for core and extension settings
-
 $script:settingsPath = Join-Path $env:APPDATA "PowerTool\settings.json"
 $script:settingsDir = Split-Path $script:settingsPath -Parent
-
-# Default core settings
 $script:defaultCoreSettings = @{
     "core.theme" = "default"
     "core.auto-update" = $true
@@ -13,9 +8,7 @@ $script:defaultCoreSettings = @{
     "core.max-history" = 100
 }
 
-# Registry for extension settings schemas
 $script:extensionSettingsSchemas = @{}
-
 function Initialize-SettingsDirectory {
     if (-not (Test-Path $script:settingsDir)) {
         New-Item -Path $script:settingsDir -ItemType Directory -Force | Out-Null

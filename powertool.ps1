@@ -112,7 +112,33 @@ if (Test-Path $extensionsPath) {
                         } else {
                             $deps = $manifest.dependencies
                         }
-                        $deps
+
+                        # Validate dependency format
+                        $validDeps = @{}
+                        foreach ($depKey in $deps.Keys) {
+                            $isValid = $false
+
+                            # Allow 'powertool' as special case
+                            if ($depKey -eq "powertool") {
+                                $isValid = $true
+                            }
+                            # Check for GitHub format: username/repository
+                            elseif ($depKey -match "^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$") {
+                                $isValid = $true
+                            }
+                            # Check for any Git URL (starts with http/https and contains common Git patterns)
+                            elseif ($depKey -match "^https?://.*" -and ($depKey -match "\.git$" -or $depKey -match "/[^/]+/[^/]+")) {
+                                $isValid = $true
+                            }
+
+                            if ($isValid) {
+                                $validDeps[$depKey] = $deps[$depKey]
+                            } else {
+                                Write-Warning "Invalid dependency format in extension '$($manifest.name)': '$depKey'. Dependencies must be either 'powertool', 'username/repository', or full Git URLs."
+                            }
+                        }
+
+                        $validDeps
                     } else {
                         @{}
                     }

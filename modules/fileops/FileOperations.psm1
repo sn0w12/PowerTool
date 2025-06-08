@@ -1025,6 +1025,7 @@ function Search-Files($path, $name = $null, $content = $null, $extension = $null
 
     $path = $resolvedPath.Path
     $verboseMode = Get-Setting -Key "core.verbose"
+    $isPs7OrGreater = $PSVersionTable.PSVersion.Major -ge 7
 
     # Check if any search criteria were provided
     $hasSearchCriteria = $name -or $content -or $extension -or $minSize -or $maxSize -or $modifiedAfter -or $modifiedBefore
@@ -1045,6 +1046,13 @@ function Search-Files($path, $name = $null, $content = $null, $extension = $null
 
     $initialLoader = $null
     $filteredFiles = @()
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $searchStats = @{
+        FilesInitiallyFound = 0
+        FilesAfterMetadataFilters = 0
+        FilesConsideredForContentSearch = 0
+        TotalDurationMs = 0
+    }
 
     try {
         # Build Get-ChildItem parameters
@@ -1064,6 +1072,7 @@ function Search-Files($path, $name = $null, $content = $null, $extension = $null
 
         # Get all files first
         $allFiles = Get-ChildItem @getChildItemParams
+        $searchStats.FilesInitiallyFound = $allFiles.Count
 
         # Apply filters
         $filteredFiles = $allFiles
@@ -1156,6 +1165,8 @@ function Search-Files($path, $name = $null, $content = $null, $extension = $null
             }
         }
 
+        $searchStats.FilesAfterMetadataFilters = $filteredFiles.Count
+
         # If content search is requested, pre-filter $filteredFiles to only include text-searchable file types
         if ($content) {
             $filteredFiles = $filteredFiles | Where-Object { $_.Length -lt 50MB -and $_.Extension -match '\.(txt|log|md|xml|json|csv|html?|css|js|ps1|psm1|psd1|py|java|c|cpp|h|cs|vb|sql|ini|cfg|conf|config)$' }
@@ -1169,51 +1180,131 @@ function Search-Files($path, $name = $null, $content = $null, $extension = $null
 
         # Content search (for text files)
         if ($content) {
-            $contentMatches = @()
-            # Use $filteredFiles (now pre-filtered for text types) as input for content search
             if ($filteredFiles.Count -gt 0) {
-                $totalFilesToSearch = $filteredFiles.Count
-                $filesSearched = 0
+                $searchStats.FilesConsideredForContentSearch = $filteredFiles.Count
 
-                # Initialize progress bar
-                Write-Progress -Activity "Searching file contents" -Status "Preparing to search..." -PercentComplete 0 -Id 1
+                if ($isPs7OrGreater) {
+                    # PowerShell 7+ : Use ForEach-Object -Parallel with memory management
+                    $contentMatchesBag = [System.Collections.Concurrent.ConcurrentBag[System.IO.FileInfo]]::new()
 
-                foreach ($file in $filteredFiles) { # This loop now only processes pre-filtered text-like files
-                    $filesSearched++
-                    Write-Progress -Activity "Searching file contents" -Status "Scanning $($file.Name) ($filesSearched of $totalFilesToSearch)" -PercentComplete (($filesSearched / $totalFilesToSearch) * 100) -Id 1
+                    # Memory-aware throttling
+                    $availableMemoryGB = [Math]::Max(1, ([System.GC]::GetTotalMemory($false) / 1GB))
+                    $maxThrottle = [Math]::Min([System.Environment]::ProcessorCount, [Math]::Max(2, [int]($availableMemoryGB * 2)))
 
-                    # The check for text-like files and size is still here as a safeguard,
-                    # but $filteredFiles should already meet these criteria.
-                    if ($file.Length -lt 50MB -and $file.Extension -match '\.(txt|log|md|xml|json|csv|html?|css|js|ps1|psm1|psd1|py|java|c|cpp|h|cs|vb|sql|ini|cfg|conf|config)$') {
-                        try {
-                            $fileContent = Get-Content -Path $file.FullName -Raw -ErrorAction SilentlyContinue
-                            if ($fileContent) {
-                                $matchFound = if ($caseSensitive) {
-                                    $fileContent -cmatch [regex]::Escape($content)
-                                } else {
-                                    $fileContent -imatch [regex]::Escape($content)
+                    $progressCounterBox = [pscustomobject]@{ Value = 0 }
+                    $totalFilesToSearch = $searchStats.FilesConsideredForContentSearch
+
+                    try {
+                        $filteredFiles | ForEach-Object -Parallel {
+                            $localFilesSearched = [System.Threading.Interlocked]::Increment([ref]$using:progressCounterBox.Value)
+                            Write-Progress -Activity "Searching file contents (Parallel)" -Status "Scanning $($_.Name)" -Id 1
+
+                            if ($_.Length -lt 50MB -and $_.Extension -match '\.(txt|log|md|xml|json|csv|html?|css|js|ps1|psm1|psd1|py|java|c|cpp|h|cs|vb|sql|ini|cfg|conf|config)$') {
+                                try {
+                                    $fileContent = $null
+                                    try {
+                                        $fileContent = Get-Content -Path $_.FullName -Raw -ErrorAction SilentlyContinue
+                                        if ($fileContent -and $fileContent.Length -gt 0) {
+                                            $matchFound = if ($using:caseSensitive) {
+                                                $fileContent -cmatch [regex]::Escape($using:content)
+                                            } else {
+                                                $fileContent -imatch [regex]::Escape($using:content)
+                                            }
+
+                                            if ($matchFound) {
+                                                $bag = $using:contentMatchesBag
+                                                $bag.Add($_)
+                                            }
+                                        }
+                                    }
+                                    finally {
+                                        # Explicitly clear file content reference
+                                        $fileContent = $null
+                                    }
                                 }
-
-                                if ($matchFound) {
-                                    $contentMatches += $file
+                                catch {
+                                    if ($using:verboseMode) {
+                                        Write-Warning "[Thread $([System.Threading.Thread]::CurrentThread.ManagedThreadId)] Could not search content in: $($_.Name) - $($_.Exception.Message)"
+                                    }
                                 }
                             }
-                        }
-                        catch {
-                            if ($verboseMode) {
-                                Write-Host "Could not search content in: $($file.Name)" -ForegroundColor DarkRed
+                        } -ThrottleLimit $maxThrottle
+
+                        # Convert results and cleanup
+                        $filteredFiles = $contentMatchesBag.ToArray()
+                    }
+                    finally {
+                        # Force garbage collection to clean up parallel operation memory
+                        $contentMatchesBag = $null
+                        $progressCounterBox = $null
+                        [System.GC]::Collect()
+                        [System.GC]::WaitForPendingFinalizers()
+                        [System.GC]::Collect()
+                    }
+
+                    if ($searchStats.FilesConsideredForContentSearch -gt 0) {
+                        Write-Progress -Activity "Searching file contents (Parallel)" -Completed -Id 1
+                    }
+                }
+                else {
+                    # Existing single-threaded logic for PS < 7 with better memory management
+                    $contentMatches = @()
+                    $filesSearched = 0
+                    $totalFilesToSearch = $searchStats.FilesConsideredForContentSearch
+
+                    Write-Progress -Activity "Searching file contents" -Status "Preparing to search..." -PercentComplete 0 -Id 1
+
+                    foreach ($file in $filteredFiles) {
+                        $filesSearched++
+                        Write-Progress -Activity "Searching file contents" -Status "($filesSearched of $totalFilesToSearch) Scanning $($file.Name)" -PercentComplete (($filesSearched / $totalFilesToSearch) * 100) -Id 1
+
+                        if ($file.Length -lt 50MB -and $file.Extension -match '\.(txt|log|md|xml|json|csv|html?|css|js|ps1|psm1|psd1|py|java|c|cpp|h|cs|vb|sql|ini|cfg|conf|config)$') {
+                            try {
+                                $fileContent = $null
+                                try {
+                                    $fileContent = Get-Content -Path $file.FullName -Raw -ErrorAction SilentlyContinue
+                                    if ($fileContent -and $fileContent.Length -gt 0) {
+                                        $matchFound = if ($caseSensitive) {
+                                            $fileContent -cmatch [regex]::Escape($content)
+                                        } else {
+                                            $fileContent -imatch [regex]::Escape($content)
+                                        }
+
+                                        if ($matchFound) {
+                                            $contentMatches += $file
+                                        }
+                                    }
+                                }
+                                finally {
+                                    # Explicitly clear file content reference
+                                    $fileContent = $null
+                                }
+
+                                # Periodic garbage collection for large searches
+                                if ($filesSearched % 100 -eq 0) {
+                                    [System.GC]::Collect()
+                                }
+                            }
+                            catch {
+                                if ($verboseMode) {
+                                    Write-Host "Could not search content in: $($file.Name) - $($_.Exception.Message)" -ForegroundColor DarkRed
+                                }
                             }
                         }
                     }
+                    if ($searchStats.FilesConsideredForContentSearch -gt 0) {
+                        Write-Progress -Activity "Searching file contents" -Completed -Id 1
+                    }
+                    $filteredFiles = $contentMatches
                 }
-                if ($totalFilesToSearch -gt 0) {
-                    Write-Progress -Activity "Searching file contents" -Completed -Id 1
-                }
+            } else {
+                $filteredFiles = @()
             }
-            $filteredFiles = $contentMatches
         }
     }
     finally {
+        $stopwatch.Stop()
+        $searchStats.TotalDurationMs = $stopwatch.ElapsedMilliseconds
         if ($initialLoader) {
             Stop-Loader $initialLoader
         }
@@ -1268,6 +1359,29 @@ function Search-Files($path, $name = $null, $content = $null, $extension = $null
 
     Write-Host ""
     Write-Host "Total: $($sortedFiles.Count) file(s)" -ForegroundColor Green
+
+    Write-Host ""
+    Write-Host "Search Statistics:" -ForegroundColor Cyan
+    Write-Host ("-" * 18) -ForegroundColor DarkGray
+    Write-Host ("  Total search duration: {0:N2} seconds ({1:N0} ms)" -f ($searchStats.TotalDurationMs / 1000.0), $searchStats.TotalDurationMs)
+    Write-Host "  Files initially found by Get-ChildItem: $($searchStats.FilesInitiallyFound)"
+    Write-Host "  Files after metadata filters: $($searchStats.FilesAfterMetadataFilters)"
+
+    if ($content) {
+        $searchMode = if ($isPs7OrGreater) { 'Parallel' } else { 'Sequential' }
+        Write-Host "  Files considered for content search: $($searchStats.FilesConsideredForContentSearch) ($searchMode)"
+        if ($searchStats.FilesConsideredForContentSearch -gt 0) {
+            $avgTimeContentMs = $searchStats.TotalDurationMs / $searchStats.FilesConsideredForContentSearch # This is overall time / content files, not content search time
+            # To get more accurate content search time, we'd need another stopwatch around the content search block itself.
+            # For now, this gives a rough idea.
+            Write-Host ("  Avg. overall time per file considered for content: {0:N3} ms" -f $avgTimeContentMs)
+        }
+    }
+
+    if ($searchStats.FilesInitiallyFound -gt 0) {
+        $avgTimeMs = $searchStats.TotalDurationMs / $searchStats.FilesInitiallyFound
+        Write-Host ("  Avg. time per initially found file: {0:N3} ms" -f $avgTimeMs)
+    }
 }
 
 function Convert-SizeToBytes($sizeString) {

@@ -497,13 +497,16 @@ function Search-Commands {
 
 function Test-ModuleCommands {
     param(
-        [hashtable]$AllCommandData
+        [hashtable]$AllCommandData,
+        [hashtable]$Extensions = @{},
+        [string]$PowerToolVersion
     )
     $validTypes = @("Argument", "OptionalArgument", "Parameter", "OptionalParameter", "Type")
     $allAliases = @{}
     $errors = @()
     $warnings = @()
 
+    # Validate command definitions
     foreach ($cmdName in $AllCommandData.Keys) {
         $cmd = $AllCommandData[$cmdName]
         # Check for Summary and Options
@@ -553,143 +556,224 @@ function Test-ModuleCommands {
         }
     }
 
-    Write-Host "ModuleCommands Validation Results:" -ForegroundColor Blue
-    if ($errors.Count -eq 0) {
-        Write-Host "  No errors found." -ForegroundColor Green
-    } else {
-        Write-Host "  Errors:" -ForegroundColor Red
-        foreach ($err in $errors) {
-            Write-Host "    $err" -ForegroundColor Red
+    # Validate extension dependencies
+    foreach ($extensionName in $Extensions.Keys) {
+        $extension = $Extensions[$extensionName]
+
+        if ($extension.Dependencies -and $extension.Dependencies.Count -gt 0) {
+            foreach ($depName in $extension.Dependencies.Keys) {
+                $requiredVersion = $extension.Dependencies[$depName]
+
+                if ($depName -eq "powertool") {
+                    # Check PowerTool version requirement
+                    Write-Verbose "Checking PowerTool version: current='$PowerToolVersion', required='$requiredVersion'"
+
+                    $versionCheck = Test-VersionRequirement -CurrentVersion $PowerToolVersion -RequiredVersion $requiredVersion
+                    Write-Verbose "Version check result: $versionCheck"
+
+                    if (-not $versionCheck) {
+                        $errors += "Extension '$extensionName' requires PowerTool $requiredVersion, but current version is $PowerToolVersion."
+                    }
+                } else {
+                    # Check other extension dependencies
+                    if (-not $Extensions.ContainsKey($depName)) {
+                        $errors += "Extension '$extensionName' depends on extension '$depName' which is not loaded."
+                    } else {
+                        $depExtension = $Extensions[$depName]
+                        if (-not (Test-VersionRequirement -CurrentVersion $depExtension.Version -RequiredVersion $requiredVersion)) {
+                            $errors += "Extension '$extensionName' requires '$depName' $requiredVersion, but loaded version is $($depExtension.Version)."
+                        }
+                    }
+                }
+            }
+        }
+
+        # Validate extension manifest structure
+        if (-not $extension.Name) {
+            $errors += "Extension '$extensionName' is missing a name."
+        }
+        if (-not $extension.Description) {
+            $errors += "Extension '$extensionName' is missing a description."
+        }
+        if (-not $extension.Modules -or $extension.Modules.Count -eq 0) {
+            $errors += "Extension '$extensionName' has no modules defined."
+        }
+
+        # Check for loaded commands vs expected commands
+        if ($extension.LoadedCommands.Count -eq 0) {
+            $warnings += "Extension '$extensionName' loaded but did not register any commands."
         }
     }
-    if ($warnings.Count -gt 0) {
-        Write-Host "  Warnings:" -ForegroundColor Yellow
-        foreach ($warn in $warnings) {
-            Write-Host "    $warn" -ForegroundColor Yellow
+
+    Write-Host "Validation Results:" -ForegroundColor Blue
+    Write-Host ""
+
+    # Debug information
+    Write-Host "Debug Information:" -ForegroundColor DarkGray
+    Write-Host "  PowerTool version: $PowerToolVersion" -ForegroundColor DarkGray
+    Write-Host "  Extensions loaded: $($Extensions.Count)" -ForegroundColor DarkGray
+    foreach ($extName in $Extensions.Keys) {
+        $ext = $Extensions[$extName]
+        $depCount = if ($ext.Dependencies) { $ext.Dependencies.Count } else { 0 }
+        Write-Host "    $extName v$($ext.Version) - Dependencies: $depCount" -ForegroundColor DarkGray
+        if ($ext.Dependencies -and $ext.Dependencies.Count -gt 0) {
+            foreach ($depName in $ext.Dependencies.Keys) {
+                $depVersion = $ext.Dependencies[$depName]
+                Write-Host "      ${depName}: $depVersion" -ForegroundColor DarkGray
+            }
         }
+    }
+    Write-Host ""
+
+    # Module Commands validation
+    Write-Host "ModuleCommands:" -ForegroundColor Cyan
+    $commandErrors = $errors | Where-Object { $_ -notlike "Extension*" }
+    if ($commandErrors.Count -eq 0) {
+        Write-Host "  [OK] No command definition errors found." -ForegroundColor Green
+    } else {
+        Write-Host "  [ERROR] Command definition errors:" -ForegroundColor Red
+        foreach ($err in $commandErrors) {
+            Write-Host "    - $err" -ForegroundColor Red
+        }
+    }
+
+    # Extension validation
+    if ($Extensions.Count -gt 0) {
+        Write-Host ""
+        Write-Host "Extensions:" -ForegroundColor Cyan
+        $extensionErrors = $errors | Where-Object { $_ -like "Extension*" }
+        $extensionWarnings = $warnings | Where-Object { $_ -like "Extension*" }
+
+        if ($extensionErrors.Count -eq 0) {
+            Write-Host "  [OK] No extension errors found." -ForegroundColor Green
+        } else {
+            Write-Host "  [ERROR] Extension errors:" -ForegroundColor Red
+            foreach ($err in $extensionErrors) {
+                Write-Host "    - $err" -ForegroundColor Red
+            }
+        }
+
+        if ($extensionWarnings.Count -gt 0) {
+            Write-Host "  [WARNING] Extension warnings:" -ForegroundColor Yellow
+            foreach ($warn in $extensionWarnings) {
+                Write-Host "    - $warn" -ForegroundColor Yellow
+            }
+        }
+
+        # Extension dependency summary
+        Write-Host ""
+        Write-Host "Extension Dependencies:" -ForegroundColor Cyan
+        $hasAnyDeps = $false
+        foreach ($extName in ($Extensions.Keys | Sort-Object)) {
+            $ext = $Extensions[$extName]
+            if ($ext.Dependencies -and $ext.Dependencies.Count -gt 0) {
+                $hasAnyDeps = $true
+                Write-Host "  ${extName}:" -ForegroundColor White
+                foreach ($depName in $ext.Dependencies.Keys) {
+                    $depVersion = $ext.Dependencies[$depName]
+                    $status = "[OK]"
+                    $color = "Green"
+
+                    if ($depName -eq "powertool") {
+                        $versionCheck = Test-VersionRequirement -CurrentVersion $PowerToolVersion -RequiredVersion $depVersion
+                        if (-not $versionCheck) {
+                            $status = "[FAIL]"
+                            $color = "Red"
+                        }
+                    } elseif (-not $Extensions.ContainsKey($depName)) {
+                        $status = "[FAIL]"
+                        $color = "Red"
+                    } elseif (-not (Test-VersionRequirement -CurrentVersion $Extensions[$depName].Version -RequiredVersion $depVersion)) {
+                        $status = "[FAIL]"
+                        $color = "Red"
+                    }
+
+                    Write-Host "    $status $depName $depVersion" -ForegroundColor $color
+                }
+            }
+        }
+
+        if (-not $hasAnyDeps) {
+            Write-Host "  No extension dependencies defined." -ForegroundColor DarkGray
+        }
+    }
+
+    Write-Host ""
+    Write-Host "Summary:" -ForegroundColor Blue
+    if ($errors.Count -eq 0) {
+        Write-Host "  [OK] All validations passed successfully!" -ForegroundColor Green
+    } else {
+        Write-Host "  [ERROR] Found $($errors.Count) error(s) that need attention." -ForegroundColor Red
+    }
+
+    if ($warnings.Count -gt 0) {
+        Write-Host "  [WARNING] $($warnings.Count) warning(s) to review." -ForegroundColor Yellow
     }
 }
 
-function Show-ExtensionInfo {
+function Test-VersionRequirement {
     param(
-        [string]$ExtensionName,
-        [hashtable]$Extensions = @{}
+        [string]$CurrentVersion,
+        [string]$RequiredVersion
     )
 
-    if (-not $Extensions -or $Extensions.Count -eq 0) {
-        Write-Host "No extensions are currently loaded." -ForegroundColor Yellow
-        Write-Host "Place extensions in the 'extensions/' directory to load them automatically." -ForegroundColor White
-        return
+    # Simple version comparison - supports basic semantic versioning
+    # Handles requirements like ">=1.0.0", "1.2.0", ">2.0.0", etc.
+
+    Write-Verbose "Test-VersionRequirement: Current='$CurrentVersion', Required='$RequiredVersion'"
+
+    if (-not $RequiredVersion) {
+        Write-Verbose "No required version specified, returning true"
+        return $true
+    }
+    if (-not $CurrentVersion) {
+        Write-Verbose "No current version specified, returning false"
+        return $false
     }
 
-    if ($ExtensionName) {
-        # Show details for a specific extension
-        $extension = $Extensions[$ExtensionName]
-        if (-not $extension) {
-            Write-Host "Extension '$ExtensionName' not found." -ForegroundColor Red
-            Write-Host ""
-            Write-Host "Available extensions:" -ForegroundColor White
-            $Extensions.Keys | Sort-Object | ForEach-Object {
-                Write-Host "  $_" -ForegroundColor Green
-            }
-            return
-        }
+    # Extract operator and version
+    $operator = "="
+    $targetVersion = $RequiredVersion
 
-        Write-Header
-        Write-Host "Extension Details:" -ForegroundColor Blue
-        Write-Host ""
-
-        Write-Host "Name: " -NoNewline -ForegroundColor White
-        Write-Host $extension.Name -ForegroundColor Cyan
-
-        Write-Host "Description: " -NoNewline -ForegroundColor White
-        Write-Host $extension.Description -ForegroundColor White
-
-        Write-Host "Version: " -NoNewline -ForegroundColor White
-        Write-Host $extension.Version -ForegroundColor Yellow
-
-        if ($extension.Author -and $extension.Author -ne "Unknown") {
-            Write-Host "Author: " -NoNewline -ForegroundColor White
-            Write-Host $extension.Author -ForegroundColor White
-        }
-
-        if ($extension.License) {
-            Write-Host "License: " -NoNewline -ForegroundColor White
-            Write-Host $extension.License -ForegroundColor White
-        }
-
-        if ($extension.Homepage) {
-            Write-Host "Homepage: " -NoNewline -ForegroundColor White
-            Write-Host $extension.Homepage -ForegroundColor Blue
-        }
-
-        if ($extension.Keywords -and $extension.Keywords.Count -gt 0) {
-            Write-Host "Keywords: " -NoNewline -ForegroundColor White
-            Write-Host ($extension.Keywords -join ", ") -ForegroundColor DarkGray
-        }
-
-        Write-Host "Path: " -NoNewline -ForegroundColor White
-        Write-Host $extension.Path -ForegroundColor DarkGray
-
-        Write-Host ""
-        Write-Host "Modules ($($extension.Modules.Count)):" -ForegroundColor Blue
-        foreach ($module in $extension.Modules) {
-            Write-Host "  $module" -ForegroundColor White
-        }
-
-        Write-Host ""
-        Write-Host "Commands ($($extension.LoadedCommands.Count)):" -ForegroundColor Blue
-        if ($extension.LoadedCommands.Count -gt 0) {
-            foreach ($commandName in ($extension.LoadedCommands | Sort-Object)) {
-                Write-Host "  " -NoNewline
-                Write-Host $commandName -ForegroundColor Cyan
-            }
-        } else {
-            Write-Host "  No commands loaded" -ForegroundColor DarkGray
-        }
-
-        if ($extension.Dependencies -and $extension.Dependencies.Count -gt 0) {
-            Write-Host ""
-            Write-Host "Dependencies:" -ForegroundColor Blue
-            foreach ($dep in $extension.Dependencies.Keys) {
-                Write-Host "  ${dep}: " -NoNewline -ForegroundColor White
-                Write-Host $extension.Dependencies[$dep] -ForegroundColor Yellow
-            }
-        }
+    if ($RequiredVersion -match '^(>=|<=|>|<|=)(.+)$') {
+        $operator = $matches[1]
+        $targetVersion = $matches[2].Trim()
+        Write-Verbose "Parsed operator: '$operator', target version: '$targetVersion'"
     } else {
-        # Show list of all extensions
-        Write-Header
-        Write-Host "Loaded Extensions:" -ForegroundColor Blue
-        Write-Host ""
+        Write-Verbose "No operator found, using exact match"
+    }
 
-        $sortedExtensions = $Extensions.Keys | Sort-Object
-        foreach ($extName in $sortedExtensions) {
-            $ext = $Extensions[$extName]
-            Write-Host "  " -NoNewline
-            Write-Host $ext.Name -NoNewline -ForegroundColor Cyan
-            Write-Host " v$($ext.Version)" -NoNewline -ForegroundColor Yellow
+    try {
+        $current = [System.Version]::Parse($CurrentVersion)
+        $target = [System.Version]::Parse($targetVersion)
 
-            if ($ext.Author -and $ext.Author -ne "Unknown") {
-                Write-Host " by $($ext.Author)" -NoNewline -ForegroundColor White
-            }
-            Write-Host ""
+        Write-Verbose "Parsed versions - Current: $current, Target: $target"
 
-            Write-Host "    $($ext.Description)" -ForegroundColor White
-            Write-Host "    Commands: " -NoNewline -ForegroundColor DarkGray
-            if ($ext.LoadedCommands.Count -gt 0) {
-                Write-Host ($ext.LoadedCommands -join ", ") -ForegroundColor DarkCyan
-            } else {
-                Write-Host "none" -ForegroundColor DarkGray
-            }
-
-            if ($ext.Keywords -and $ext.Keywords.Count -gt 0) {
-                Write-Host "    Keywords: " -NoNewline -ForegroundColor DarkGray
-                Write-Host ($ext.Keywords -join ", ") -ForegroundColor DarkGray
-            }
-            Write-Host ""
+        $result = switch ($operator) {
+            ">=" { $current -ge $target }
+            "<=" { $current -le $target }
+            ">" { $current -gt $target }
+            "<" { $current -lt $target }
+            "=" { $current -eq $target }
+            default { $current -eq $target }
         }
 
-        Write-Host "Use 'powertool extension <name>' to see detailed information about a specific extension." -ForegroundColor White
+        Write-Verbose "Version comparison result: $result"
+        return $result
+    } catch {
+        Write-Verbose "Version parsing failed, falling back to string comparison: $($_.Exception.Message)"
+        # Fallback to string comparison if version parsing fails
+        $result = switch ($operator) {
+            ">=" { $CurrentVersion -ge $targetVersion }
+            "<=" { $CurrentVersion -le $targetVersion }
+            ">" { $CurrentVersion -gt $targetVersion }
+            "<" { $CurrentVersion -lt $targetVersion }
+            "=" { $CurrentVersion -eq $targetVersion }
+            default { $CurrentVersion -eq $targetVersion }
+        }
+
+        Write-Verbose "String comparison result: $result"
+        return $result
     }
 }
 
@@ -759,9 +843,9 @@ $script:ModuleCommands = @{
     "validate" = @{
         Aliases = @("check", "val")
         Action = {
-            Test-ModuleCommands -AllCommandData $script:commandDefinitions
+            Test-ModuleCommands -AllCommandData $script:commandDefinitions -Extensions $script:extensions -PowerToolVersion $version
         }
-        Summary = "Validate all ModuleCommands for correct structure, option types, and duplicate aliases."
+        Summary = "Validate all ModuleCommands for correct structure, option types, duplicate aliases, and extension dependencies."
         Options = @{}
         Examples = @(
             "powertool validate",
@@ -770,4 +854,4 @@ $script:ModuleCommands = @{
     }
 }
 
-Export-ModuleMember -Function Show-Help, Write-ColoredOptions, Write-ColoredExample, Show-Version, Search-Commands, Test-ModuleCommands, Show-ExtensionInfo -Variable ModuleCommands
+Export-ModuleMember -Function Show-Help, Write-ColoredOptions, Write-ColoredExample, Show-Version, Search-Commands, Test-ModuleCommands, Show-ExtensionInfo, Test-VersionRequirement -Variable ModuleCommands

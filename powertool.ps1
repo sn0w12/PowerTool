@@ -100,7 +100,20 @@ if (Test-Path $extensionsPath) {
                     License = if ($manifest.license) { $manifest.license } else { $null }
                     Homepage = if ($manifest.homepage) { $manifest.homepage } else { $null }
                     Keywords = if ($manifest.keywords) { $manifest.keywords } else { @() }
-                    Dependencies = if ($manifest.dependencies) { $manifest.dependencies } else { @{} }
+                    Dependencies = if ($manifest.dependencies) {
+                        # Ensure dependencies is a hashtable, not a PSCustomObject
+                        $deps = @{}
+                        if ($manifest.dependencies -is [PSCustomObject]) {
+                            $manifest.dependencies.PSObject.Properties | ForEach-Object {
+                                $deps[$_.Name] = $_.Value
+                            }
+                        } else {
+                            $deps = $manifest.dependencies
+                        }
+                        $deps
+                    } else {
+                        @{}
+                    }
                     Path = $extensionDir.FullName
                     Modules = @()
                     LoadedCommands = @()

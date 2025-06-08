@@ -116,11 +116,13 @@ PowerTool stores settings in `%APPDATA%\PowerTool\settings.json`. Key settings i
 -   **`core.confirm-destructive`** - Prompt before destructive operations (default: true)
 -   **`core.max-history`** - Maximum command history entries (default: 100)
 
-## Extension System
+## Extensions
 
-PowerTool supports extensions through the `extensions/` directory. Each extension requires:
+PowerTool supports a powerful extension system that allows developers to create custom commands and functionality. Extensions are automatically loaded from the `extensions/` directory.
 
-### Extension Structure
+For detailed information on creating and developing extensions, see [EXTENSIONS.md](EXTENSIONS.md).
+
+### Quick Extension Example
 
 ```
 extensions/
@@ -130,76 +132,4 @@ extensions/
         └── MyModule.psm1
 ```
 
-### extension.json Format
-
-```json
-{
-    "name": "my-extension",
-    "description": "My custom extension",
-    "version": "1.0.0",
-    "modules": ["modules/MyModule.psm1"]
-}
-```
-
-### Extension Module Format
-
-```powershell
-# MyModule.psm1
-function My-CustomFunction {
-    # Implementation
-}
-
-$script:ModuleCommands = @{
-    "my-command" = @{
-        Aliases = @("mc")
-        Action = { My-CustomFunction }
-        Summary = "My custom command description"
-        Options = @{
-            0 = @(
-                @{ Token = "parameter"; Type = "OptionalArgument"; Description = "Parameter description" }
-            )
-        }
-        Examples = @("powertool my-command")
-    }
-}
-
-Export-ModuleMember -Function My-CustomFunction -Variable ModuleCommands
-```
-
-## Module Development
-
-### Command Definition Structure
-
-```powershell
-$script:ModuleCommands = @{
-    "command-name" = @{
-        Aliases = @("alias1", "alias2")  # Optional short names
-        Action = {
-            # PowerShell script block to execute
-            # Access parameters via $Value1, $Value2, etc.
-        }
-        Summary = "Brief description of what the command does"
-        Options = @{
-            0 = @(  # Syntax group 0
-                @{ Token = "param1"; Type = "Argument"; Description = "Required parameter" }
-                @{ Token = "param2"; Type = "OptionalArgument"; Description = "Optional parameter" }
-            )
-            1 = @(  # Alternative syntax group 1
-                @{ Token = "Mode"; Type = "Parameter"; Description = "Alternative mode parameter" }
-            )
-        }
-        Examples = @(
-            "powertool command-name value1",
-            "powertool command-name -Mode alternative"
-        )
-    }
-}
-```
-
-### Option Types
-
--   **`Argument`** - Required parameter `[value]`
--   **`OptionalArgument`** - Optional parameter `[value?]`
--   **`Parameter`** - Named parameter `-Parameter`
--   **`OptionalParameter`** - Optional named parameter `-Parameter?`
--   **`Type`** - Type hint `<type>`
+Extensions integrate seamlessly with PowerTool's command system, settings, and utilities.

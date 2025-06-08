@@ -1,3 +1,26 @@
+<#
+.SYNOPSIS
+    PowerTool Content Processing Module - File content analysis and processing commands
+
+.TYPE
+    Command Module
+
+.DESCRIPTION
+    This is a COMMAND MODULE that provides PowerTool commands for processing and analyzing file content.
+    This module focuses on the actual content within files rather than file system operations.
+
+    Purpose:
+    - Process and analyze file content based on specific criteria
+    - Filter and manipulate files based on content properties
+    - Image processing and analysis (dimensions, metadata, quality)
+    - Document content processing and transformation
+    - Media file analysis and filtering
+
+    This module complements FileOperations.psm1 by focusing on file content rather than
+    file system structure. Commands should analyze or modify files based on their actual
+    content, properties, or metadata rather than just file system attributes.
+#>
+
 function Remove-SmallImages($dir, $minWidth, $minHeight) {
     # Resolve the full path
     $resolvedPath = Resolve-Path $dir -ErrorAction SilentlyContinue

@@ -1,3 +1,25 @@
+<#
+.SYNOPSIS
+    PowerTool Utility Functions Module - Common helper functions for other modules
+
+.TYPE
+    Utility Module
+
+.DESCRIPTION
+    This is a UTILITY MODULE that provides shared helper functions for other PowerTool modules.
+    It does NOT provide PowerTool commands directly.
+
+    Purpose:
+    - Provide common utility functions used across multiple modules
+    - String manipulation and comparison functions
+    - Path resolution and file system helpers
+    - Data processing and transformation utilities
+    - Shared algorithms and calculations
+
+    This module exports individual functions that can be imported and used by other modules.
+    Functions should be generic, reusable, and not specific to any particular domain.
+#>
+
 function Get-LevenshteinDistance {
     <#
         .SYNOPSIS

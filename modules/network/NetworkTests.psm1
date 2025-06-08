@@ -1,3 +1,25 @@
+<#
+.SYNOPSIS
+    PowerTool Network Testing Module - Network diagnostics and connectivity commands
+
+.TYPE
+    Command Module
+
+.DESCRIPTION
+    This is a COMMAND MODULE that provides PowerTool commands for network testing and diagnostics.
+
+    Purpose:
+    - Network connectivity testing and validation
+    - DNS resolution testing and troubleshooting
+    - Network speed and performance testing
+    - Network configuration display and analysis
+    - Comprehensive network diagnostics
+
+    This module exports PowerTool commands through the $ModuleCommands variable.
+    All commands should be related to network testing, diagnostics, or configuration
+    and should provide clear, actionable network information to users.
+#>
+
 function Test-NetworkConnectivity {
     param(
         [string[]]$Hosts = @("8.8.8.8", "1.1.1.1", "google.com"),

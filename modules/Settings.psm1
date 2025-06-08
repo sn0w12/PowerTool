@@ -1,3 +1,25 @@
+<#
+.SYNOPSIS
+    PowerTool Settings Management Module - Configuration and settings commands
+
+.TYPE
+    Command Module
+
+.DESCRIPTION
+    This is a COMMAND MODULE that provides PowerTool commands for managing application settings.
+    It also exports utility functions for other modules to read settings.
+
+    Purpose:
+    - Manage PowerTool configuration settings (core and extensions)
+    - Provide settings storage and retrieval functionality
+    - Handle settings validation and type conversion
+    - Support extension-specific settings registration
+    - Provide settings display and modification commands
+
+    This module serves dual purposes: providing user commands for settings management
+    and utility functions for other modules to access configuration data.
+#>
+
 $script:settingsPath = Join-Path $env:APPDATA "PowerTool\settings.json"
 $script:settingsDir = Split-Path $script:settingsPath -Parent
 $script:defaultCoreSettings = @{

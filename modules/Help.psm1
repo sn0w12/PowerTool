@@ -1,3 +1,25 @@
+<#
+.SYNOPSIS
+    PowerTool Help System Module - Help, documentation, and command discovery
+
+.TYPE
+    Command Module
+
+.DESCRIPTION
+    This is a COMMAND MODULE that provides PowerTool commands for help and documentation.
+    It also exports utility functions for displaying formatted help content.
+
+    Purpose:
+    - Provide comprehensive help and documentation commands
+    - Enable command discovery and search functionality
+    - Display version and system information
+    - Validate command definitions and module structure
+    - Format and display command help content
+
+    This module is essential for user experience and should provide clear,
+    well-formatted help content that makes PowerTool easy to discover and use.
+#>
+
 function Write-ColoredOptions {
     param([object]$OptionsData)
 

@@ -1,3 +1,24 @@
+<#
+.SYNOPSIS
+    PowerTool File Operations Module - Core file and directory manipulation commands
+
+.TYPE
+    Command Module
+
+.DESCRIPTION
+    This is a COMMAND MODULE that provides PowerTool commands for file and directory operations.
+
+    Purpose:
+    - File and directory manipulation (rename, move, merge, etc.)
+    - File metadata inspection and analysis
+    - File integrity and hashing operations
+
+    This module exports PowerTool commands through the $ModuleCommands variable.
+    Each command should have a well-defined purpose related to file/directory operations
+    and should follow PowerTool's command structure with proper aliases, summaries,
+    options, and examples.
+#>
+
 function Rename-FilesRandomly($dir, $recursive = $false) {
     # Resolve the full path
     $resolvedPath = Resolve-Path $dir -ErrorAction SilentlyContinue

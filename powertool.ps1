@@ -7,7 +7,15 @@ param (
     [int]$MinSize = 0,
     [string]$Pattern,
     [string]$Module,
+    [string]$Name,
+    [string]$Content,
+    [string]$Extension,
+    [string]$MaxSize,
+    [string]$ModifiedAfter,
+    [string]$ModifiedBefore,
     [switch]$Recursive,
+    [switch]$NoRecursive,
+    [switch]$CaseSensitive,
     [switch]$Update,
     [switch]$Force
 )

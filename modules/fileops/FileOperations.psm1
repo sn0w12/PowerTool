@@ -1015,6 +1015,245 @@ function Get-PowerToolFileHash($path, $algorithm = "SHA256") {
     }
 }
 
+function Search-Files($path, $name = $null, $content = $null, $extension = $null, $minSize = $null, $maxSize = $null, $modifiedAfter = $null, $modifiedBefore = $null, $recursive = $true, $caseSensitive = $false) {
+    # Resolve the full path
+    $resolvedPath = Resolve-Path $path -ErrorAction SilentlyContinue
+    if (-not $resolvedPath) {
+        Write-Error "Directory not found: $path"
+        return
+    }
+
+    $path = $resolvedPath.Path
+    $verboseMode = Get-Setting -Key "core.verbose"
+
+    # Check if any search criteria were provided
+    $hasSearchCriteria = $name -or $content -or $extension -or $minSize -or $maxSize -or $modifiedAfter -or $modifiedBefore
+
+    if (-not $hasSearchCriteria) {
+        Write-Host "No search criteria specified. Please provide at least one filter option:" -ForegroundColor Yellow
+        Write-Host "  -Name (filename pattern or text)" -ForegroundColor Green
+        Write-Host "  -Content (text content)" -ForegroundColor Green
+        Write-Host "  -Extension (file extension)" -ForegroundColor Green
+        Write-Host "  -MinSize / -MaxSize (file size)" -ForegroundColor Green
+        Write-Host "  -ModifiedAfter / -ModifiedBefore (date)" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "Examples:" -ForegroundColor Cyan
+        Write-Host "  pt sf -Name `"*.txt`"" -ForegroundColor White
+        Write-Host "  pt sf -Name `"inanna`"" -ForegroundColor White
+        return
+    }
+
+    # Build Get-ChildItem parameters
+    $getChildItemParams = @{
+        Path = $path
+        File = $true
+    }
+
+    if ($recursive) {
+        $getChildItemParams.Recurse = $true
+    }
+
+    # Get all files first
+    $allFiles = Get-ChildItem @getChildItemParams
+
+    # Apply filters
+    $filteredFiles = $allFiles
+
+    # Name filter (supports wildcards, exact contains, and fuzzy matching)
+    if ($name) {
+        if ($name.Contains('*') -or $name.Contains('?')) {
+            # Use wildcard matching
+            if ($caseSensitive) {
+                $filteredFiles = $filteredFiles | Where-Object { $_.Name -clike $name }
+            } else {
+                $filteredFiles = $filteredFiles | Where-Object { $_.Name -like $name }
+            }
+        } else {
+            # For simple text, use contains first, then fuzzy matching for broader results
+            $exactMatches = @()
+            $fuzzyMatches = @()
+
+            foreach ($file in $filteredFiles) {
+                # First try exact contains matching
+                $fileName = if ($caseSensitive) { $file.Name } else { $file.Name.ToLower() }
+                $searchName = if ($caseSensitive) { $name } else { $name.ToLower() }
+
+                if ($fileName.Contains($searchName)) {
+                    $exactMatches += $file
+                } else {
+                    # Use fuzzy matching for potential matches
+                    $distance = Get-LevenshteinDistance -String1 $fileName -String2 $searchName -CaseSensitive:$caseSensitive
+                    $maxLength = [Math]::Max($fileName.Length, $searchName.Length)
+                    if ($maxLength -gt 0) {
+                        $similarity = 1 - ($distance / $maxLength)
+                        # Include files with reasonable similarity or partial matches
+                        if ($similarity -gt 0.3 -or $fileName.Contains($searchName.Substring(0, [Math]::Min(3, $searchName.Length)))) {
+                            $fuzzyMatches += $file
+                        }
+                    }
+                }
+            }
+
+            # Combine exact matches first, then fuzzy matches
+            $filteredFiles = $exactMatches + $fuzzyMatches | Sort-Object Name -Unique
+        }
+    }
+
+    # Extension filter
+    if ($extension) {
+        if (-not $extension.StartsWith('.')) {
+            $extension = ".$extension"
+        }
+        if ($caseSensitive) {
+            $filteredFiles = $filteredFiles | Where-Object { $_.Extension -ceq $extension }
+        } else {
+            $filteredFiles = $filteredFiles | Where-Object { $_.Extension -ieq $extension }
+        }
+    }
+
+    # Size filters
+    if ($minSize) {
+        $minSizeBytes = Convert-SizeToBytes $minSize
+        if ($minSizeBytes -ne $null) {
+            $filteredFiles = $filteredFiles | Where-Object { $_.Length -ge $minSizeBytes }
+        }
+    }
+
+    if ($maxSize) {
+        $maxSizeBytes = Convert-SizeToBytes $maxSize
+        if ($maxSizeBytes -ne $null) {
+            $filteredFiles = $filteredFiles | Where-Object { $_.Length -le $maxSizeBytes }
+        }
+    }
+
+    # Date filters
+    if ($modifiedAfter) {
+        try {
+            $afterDate = [DateTime]::Parse($modifiedAfter)
+            $filteredFiles = $filteredFiles | Where-Object { $_.LastWriteTime -ge $afterDate }
+        }
+        catch {
+            Write-Warning "Invalid date format for modifiedAfter: $modifiedAfter"
+        }
+    }
+
+    if ($modifiedBefore) {
+        try {
+            $beforeDate = [DateTime]::Parse($modifiedBefore)
+            $filteredFiles = $filteredFiles | Where-Object { $_.LastWriteTime -le $beforeDate }
+        }
+        catch {
+            Write-Warning "Invalid date format for modifiedBefore: $modifiedBefore"
+        }
+    }
+
+    # Content search (for text files)
+    if ($content) {
+        $contentMatches = @()
+        Write-Host "Searching file contents..." -ForegroundColor Yellow
+
+        foreach ($file in $filteredFiles) {
+            # Only search in files that are likely to be text files and not too large
+            if ($file.Length -lt 50MB -and $file.Extension -match '\.(txt|log|md|xml|json|csv|html?|css|js|ps1|psm1|psd1|py|java|c|cpp|h|cs|vb|sql|ini|cfg|conf|config)$') {
+                try {
+                    $fileContent = Get-Content -Path $file.FullName -Raw -ErrorAction SilentlyContinue
+                    if ($fileContent) {
+                        $matchFound = if ($caseSensitive) {
+                            $fileContent -cmatch [regex]::Escape($content)
+                        } else {
+                            $fileContent -imatch [regex]::Escape($content)
+                        }
+
+                        if ($matchFound) {
+                            $contentMatches += $file
+                        }
+                    }
+                }
+                catch {
+                    if ($verboseMode) {
+                        Write-Host "Could not search content in: $($file.Name)" -ForegroundColor DarkRed
+                    }
+                }
+            }
+        }
+        $filteredFiles = $contentMatches
+    }
+
+    # Display results
+    if ($filteredFiles.Count -eq 0) {
+        Write-Host "No files found matching the criteria." -ForegroundColor Yellow
+        return
+    }
+
+    # Sort files by directory then name
+    $sortedFiles = $filteredFiles | Sort-Object DirectoryName, Name
+
+    Write-Host "Found $($sortedFiles.Count) file(s) matching criteria:" -ForegroundColor Green
+    Write-Host ""
+
+    $currentDir = ""
+    foreach ($file in $sortedFiles) {
+        # Group by directory for better readability
+        if ($file.DirectoryName -ne $currentDir) {
+            $currentDir = $file.DirectoryName
+            $relativePath = if ($currentDir.StartsWith($path)) {
+                $currentDir.Substring($path.Length).TrimStart('\')
+            } else {
+                $currentDir
+            }
+            if ($relativePath -eq "") { $relativePath = "." }
+            Write-Host "[$relativePath]" -ForegroundColor Blue
+        }
+
+        # File info
+        Write-Host "  " -NoNewline
+        Write-Host $file.Name -ForegroundColor White -NoNewline
+
+        # Size
+        $size = if ($file.Length -lt 1KB) { "$($file.Length)B" }
+               elseif ($file.Length -lt 1MB) { "{0:N1}KB" -f ($file.Length / 1KB) }
+               elseif ($file.Length -lt 1GB) { "{0:N1}MB" -f ($file.Length / 1MB) }
+               else { "{0:N1}GB" -f ($file.Length / 1GB) }
+
+        Write-Host " ($size)" -ForegroundColor DarkGray -NoNewline
+
+        # Modified date
+        Write-Host " - Modified: $($file.LastWriteTime.ToString('yyyy-MM-dd HH:mm'))" -ForegroundColor DarkGray
+
+        # Show full path in verbose mode
+        if ($verboseMode) {
+            Write-Host "    Full path: $($file.FullName)" -ForegroundColor DarkGray
+        }
+    }
+
+    Write-Host ""
+    Write-Host "Total: $($sortedFiles.Count) file(s)" -ForegroundColor Green
+}
+
+function Convert-SizeToBytes($sizeString) {
+    if (-not $sizeString) { return $null }
+
+    # Remove spaces and convert to uppercase
+    $sizeString = $sizeString.Replace(" ", "").ToUpper()
+
+    # Extract number and unit
+    if ($sizeString -match '^(\d+(?:\.\d+)?)([KMGT]?B?)$') {
+        $number = [double]$matches[1]
+        $unit = $matches[2]
+
+        switch ($unit) {
+            { $_ -in @("", "B") } { return [long]$number }
+            { $_ -in @("K", "KB") } { return [long]($number * 1KB) }
+            { $_ -in @("M", "MB") } { return [long]($number * 1MB) }
+            { $_ -in @("G", "GB") } { return [long]($number * 1GB) }
+            { $_ -in @("T", "TB") } { return [long]($number * 1TB) }
+            default { return $null }
+        }
+    }
+
+    return $null
+}
+
 $script:ModuleCommands = @{
     "rename-random" = @{
         Aliases = @("rr")
@@ -1148,6 +1387,56 @@ $script:ModuleCommands = @{
             "powertool sha256 ."
         )
     }
+    "search-files" = @{
+        Aliases = @("find", "locate", "sf")
+        Action = {
+            $targetPath = Get-TargetPath $Value1
+            $useRecursive = -not ($PSBoundParameters.ContainsKey('NoRecursive') -and $NoRecursive)
+            $useCaseSensitive = $PSBoundParameters.ContainsKey('CaseSensitive') -and $CaseSensitive
+
+            $searchParams = @{
+                path = $targetPath
+                recursive = $useRecursive
+                caseSensitive = $useCaseSensitive
+            }
+
+            # Debug: Show what parameters we received
+            if (Get-Setting -Key "core.verbose") {
+                Write-Host "Debug: Received parameters:" -ForegroundColor DarkGray
+                Write-Host "  Name: '$Name'" -ForegroundColor DarkGray
+                Write-Host "  Content: '$Content'" -ForegroundColor DarkGray
+                Write-Host "  Extension: '$Extension'" -ForegroundColor DarkGray
+            }
+
+            if ($Name) { $searchParams.name = $Name }
+            if ($Content) { $searchParams.content = $Content }
+            if ($Extension) { $searchParams.extension = $Extension }
+            if ($MinSize) { $searchParams.minSize = $MinSize }
+            if ($MaxSize) { $searchParams.maxSize = $MaxSize }
+            if ($ModifiedAfter) { $searchParams.modifiedAfter = $ModifiedAfter }
+            if ($ModifiedBefore) { $searchParams.modifiedBefore = $ModifiedBefore }
+
+            Search-Files @searchParams
+        }
+        Summary = "Search for files using various criteria."
+        Options = @{
+            0 = @(
+                @{ Token = "path"; Type = "OptionalArgument"; Description = "Directory to search in. Defaults to current location if omitted." }
+                @{ Token = "Name"; Type = "OptionalParameter"; Description = "Search by filename (supports wildcards like *.txt or simple text)." }
+                @{ Token = "Content"; Type = "OptionalParameter"; Description = "Search for text content within files." }
+                @{ Token = "Extension"; Type = "OptionalParameter"; Description = "Filter by file extension (e.g., txt, .pdf)." }
+                @{ Token = "MinSize"; Type = "OptionalParameter"; Description = "Minimum file size (e.g., 1MB, 500KB, 1024)." }
+                @{ Token = "MaxSize"; Type = "OptionalParameter"; Description = "Maximum file size (e.g., 10MB, 2GB)." }
+                @{ Token = "ModifiedAfter"; Type = "OptionalParameter"; Description = "Files modified after this date (e.g., '2024-01-01')." }
+                @{ Token = "ModifiedBefore"; Type = "OptionalParameter"; Description = "Files modified before this date (e.g., '2024-12-31')." }
+                @{ Token = "NoRecursive"; Type = "OptionalParameter"; Description = "Search only in the specified directory, not subdirectories." }
+                @{ Token = "CaseSensitive"; Type = "OptionalParameter"; Description = "Make name and content searches case-sensitive." }
+            )
+        }
+        Examples = @(
+            "powertool search-files -Name `"report*.docx`" -Content `"Quarterly report`" -MinSize 1MB -MaxSize 10MB -ModifiedAfter `"2024-01-01`" -ModifiedBefore `"2024-12-31`""
+        )
+    }
 }
 
-Export-ModuleMember -Function Rename-FilesRandomly, Merge-Directory, Show-DirectoryTree, Show-FileMetadata, Read-PngMetadata, Read-WindowsRuntimeMetadata, Remove-TextFromFiles -Variable ModuleCommands
+Export-ModuleMember -Function Rename-FilesRandomly, Merge-Directory, Show-DirectoryTree, Show-FileMetadata, Read-PngMetadata, Read-WindowsRuntimeMetadata, Remove-TextFromFiles, Get-PowerToolFileHash, Search-Files, Convert-SizeToBytes -Variable ModuleCommands

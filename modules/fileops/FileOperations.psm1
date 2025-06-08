@@ -1150,30 +1150,39 @@ function Search-Files($path, $name = $null, $content = $null, $extension = $null
     # Content search (for text files)
     if ($content) {
         $contentMatches = @()
-        Write-Host "Searching file contents..." -ForegroundColor Yellow
+        $loader = $null
+        try {
+            # Reverted to original loader message and color
+            $loader = Start-Loader -Message "Searching file contents" -Style "Dots" -Color "Yellow"
 
-        foreach ($file in $filteredFiles) {
-            # Only search in files that are likely to be text files and not too large
-            if ($file.Length -lt 50MB -and $file.Extension -match '\.(txt|log|md|xml|json|csv|html?|css|js|ps1|psm1|psd1|py|java|c|cpp|h|cs|vb|sql|ini|cfg|conf|config)$') {
-                try {
-                    $fileContent = Get-Content -Path $file.FullName -Raw -ErrorAction SilentlyContinue
-                    if ($fileContent) {
-                        $matchFound = if ($caseSensitive) {
-                            $fileContent -cmatch [regex]::Escape($content)
-                        } else {
-                            $fileContent -imatch [regex]::Escape($content)
+            foreach ($file in $filteredFiles) {
+                # Only search in files that are likely to be text files and not too large
+                if ($file.Length -lt 50MB -and $file.Extension -match '\.(txt|log|md|xml|json|csv|html?|css|js|ps1|psm1|psd1|py|java|c|cpp|h|cs|vb|sql|ini|cfg|conf|config)$') {
+                    try {
+                        $fileContent = Get-Content -Path $file.FullName -Raw -ErrorAction SilentlyContinue
+                        if ($fileContent) {
+                            $matchFound = if ($caseSensitive) {
+                                $fileContent -cmatch [regex]::Escape($content)
+                            } else {
+                                $fileContent -imatch [regex]::Escape($content)
+                            }
+
+                            if ($matchFound) {
+                                $contentMatches += $file
+                            }
                         }
-
-                        if ($matchFound) {
-                            $contentMatches += $file
+                    }
+                    catch {
+                        if ($verboseMode) {
+                            Write-Host "Could not search content in: $($file.Name)" -ForegroundColor DarkRed
                         }
                     }
                 }
-                catch {
-                    if ($verboseMode) {
-                        Write-Host "Could not search content in: $($file.Name)" -ForegroundColor DarkRed
-                    }
-                }
+            }
+        }
+        finally {
+            if ($loader) {
+                Stop-Loader $loader
             }
         }
         $filteredFiles = $contentMatches

@@ -1545,8 +1545,8 @@ $script:ModuleCommands = @{
         Aliases = @("locate", "sf")
         Action = {
             $targetPath = Get-TargetPath $Value1
-            $useRecursive = -not ($PSBoundParameters.ContainsKey('NoRecursive') -and $NoRecursive)
-            $useCaseSensitive = $PSBoundParameters.ContainsKey('CaseSensitive') -and $CaseSensitive
+            $useRecursive = -not $NoRecursive
+            $useCaseSensitive = $CaseSensitive
 
             $searchParams = @{
                 path = $targetPath
@@ -1560,6 +1560,8 @@ $script:ModuleCommands = @{
                 Write-Host "  Name: '$Name'" -ForegroundColor DarkGray
                 Write-Host "  Content: '$Content'" -ForegroundColor DarkGray
                 Write-Host "  Extension: '$Extension'" -ForegroundColor DarkGray
+                Write-Host "  NoRecursive value: $NoRecursive" -ForegroundColor DarkGray
+                Write-Host "  useRecursive calculated: $useRecursive" -ForegroundColor DarkGray
             }
 
             if ($Name) { $searchParams.name = $Name }

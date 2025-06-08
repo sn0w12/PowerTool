@@ -1255,6 +1255,176 @@ function Install-Extension {
     }
 }
 
+function Update-PowerTool {
+    param(
+        [string]$PowerToolVersion
+    )
+
+    # Check if git is available
+    try {
+        $null = & git --version 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Git not found"
+        }
+    } catch {
+        Write-Host "Git is required to update PowerTool. Please install Git and ensure it's in your PATH." -ForegroundColor Red
+        return
+    }
+
+    # Get PowerTool root directory (assuming Help.psm1 is in modules/ subdirectory)
+    $powerToolRoot = (Get-Item $PSScriptRoot).Parent.FullName
+
+    # Check if PowerTool directory is a git repository
+    $gitPath = Join-Path $powerToolRoot ".git"
+    if (-not (Test-Path $gitPath)) {
+        Write-Host "PowerTool is not a git repository. Cannot update via git pull." -ForegroundColor Red
+        Write-Host "Consider downloading the latest version manually from GitHub." -ForegroundColor White
+        return
+    }
+
+    Write-Host "Updating PowerTool..." -ForegroundColor White
+    Write-Host "Current version: " -NoNewline -ForegroundColor White
+    Write-Host "v$PowerToolVersion" -ForegroundColor Yellow
+
+    try {
+        $originalLocation = Get-Location
+        Set-Location $powerToolRoot
+
+        Write-Host "Checking for updates..." -ForegroundColor DarkGray
+
+        # Check git status for local changes
+        $gitStatus = & git status --porcelain 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Failed to check git status. Make sure git is installed and accessible." -ForegroundColor Red
+            return
+        }
+
+        if ($gitStatus) {
+            Write-Host "Warning: PowerTool has local changes. Continuing with update..." -ForegroundColor Yellow
+        }
+
+        # Fetch latest changes
+        $fetchResult = & git fetch 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Failed to fetch from remote repository." -ForegroundColor Red
+            Write-Host $fetchResult -ForegroundColor Red
+            return
+        }
+
+        # Check if there are updates available
+        $behindCommits = & git rev-list --count HEAD..@{u} 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Could not determine update status. Attempting pull anyway..." -ForegroundColor Yellow
+            $behindCommits = "unknown"
+        }
+
+        if ($behindCommits -eq "0") {
+            Write-Host "PowerTool is already up to date." -ForegroundColor Green
+            return
+        }
+
+        if ($behindCommits -ne "unknown") {
+            Write-Host "Found $behindCommits new commit(s). Pulling changes..." -ForegroundColor Green
+        }
+
+        # Perform git pull
+        $pullResult = & git pull 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Failed to pull updates:" -ForegroundColor Red
+            Write-Host $pullResult -ForegroundColor Red
+            return
+        }
+
+        Write-Host "PowerTool updated successfully!" -ForegroundColor Green
+        Write-Host "Note: The update will take effect the next time you start PowerTool." -ForegroundColor Yellow
+
+    } catch {
+        Write-Host "An error occurred during update: $($_.Exception.Message)" -ForegroundColor Red
+    } finally {
+        Set-Location $originalLocation
+    }
+}
+
+function Get-LatestVersion {
+    param(
+        [string]$CurrentVersion
+    )
+
+    Write-Host "Checking latest version..." -ForegroundColor White
+    Write-Host "Current version: " -NoNewline -ForegroundColor White
+    Write-Host "v$CurrentVersion" -ForegroundColor Yellow
+
+    try {
+        # Query GitHub API for latest tags
+        $apiUrl = "https://api.github.com/repos/sn0w12/PowerTool/tags"
+
+        # Use Invoke-RestMethod with error handling
+        $response = Invoke-RestMethod -Uri $apiUrl -Method Get -ErrorAction Stop
+
+        if ($response.Count -eq 0) {
+            Write-Host "No tags found in the repository." -ForegroundColor Yellow
+            return
+        }
+
+        # Get the latest tag (first in the array as GitHub returns them in descending order)
+        $latestTag = $response[0]
+        $latestVersion = $latestTag.name
+
+        Write-Host "Latest version: " -NoNewline -ForegroundColor White
+        Write-Host $latestVersion -ForegroundColor Green
+
+        # Compare versions
+        $currentVersionClean = $CurrentVersion -replace '^v', ''
+        $latestVersionClean = $latestVersion -replace '^v', ''
+
+        try {
+            $current = [System.Version]::Parse($currentVersionClean)
+            $latest = [System.Version]::Parse($latestVersionClean)
+
+            if ($current -lt $latest) {
+                Write-Host ""
+                Write-Host "A newer version is available!" -ForegroundColor Yellow
+                Write-Host "You can update by running: " -NoNewline -ForegroundColor White
+                Write-Host "powertool update" -ForegroundColor Green
+            } elseif ($current -eq $latest) {
+                Write-Host ""
+                Write-Host "You are running the latest version!" -ForegroundColor Green
+            } else {
+                Write-Host ""
+                Write-Host "You are running a newer version than the latest tag." -ForegroundColor Cyan
+            }
+        } catch {
+            # Fallback to string comparison if version parsing fails
+            if ($currentVersionClean -ne $latestVersionClean) {
+                Write-Host ""
+                Write-Host "Version comparison: Current '$currentVersionClean' vs Latest '$latestVersionClean'" -ForegroundColor DarkGray
+            } else {
+                Write-Host ""
+                Write-Host "You are running the latest version!" -ForegroundColor Green
+            }
+        }
+
+        # Show commit info for the latest tag
+        Write-Host ""
+        Write-Host "Latest tag info:" -ForegroundColor Blue
+        Write-Host "  Commit: " -NoNewline -ForegroundColor White
+        Write-Host $latestTag.commit.sha.Substring(0, 7) -ForegroundColor DarkGray
+        if ($latestTag.commit.url) {
+            Write-Host "  View on GitHub: " -NoNewline -ForegroundColor White
+            Write-Host "https://github.com/sn0w12/PowerTool/commit/$($latestTag.commit.sha)" -ForegroundColor Blue
+        }
+
+    } catch {
+        Write-Host "Failed to check latest version: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "Please check your internet connection or try again later." -ForegroundColor White
+
+        # Suggest manual check
+        Write-Host ""
+        Write-Host "You can manually check for updates at:" -ForegroundColor White
+        Write-Host "https://github.com/sn0w12/PowerTool/tags" -ForegroundColor Blue
+    }
+}
+
 $script:ModuleCommands = @{
     "help" = @{
         Aliases = @("h")
@@ -1354,6 +1524,32 @@ $script:ModuleCommands = @{
             "pt get someuser/some-repo"
         )
     }
+    "update" = @{
+        Aliases = @("upgrade", "up")
+        Action = {
+            Update-PowerTool -PowerToolVersion $version
+        }
+        Summary = "Update PowerTool to the latest version using git pull."
+        Options = @{
+        }
+        Examples = @(
+            "powertool update",
+            "pt up"
+        )
+    }
+    "latest" = @{
+        Aliases = @("check", "newest")
+        Action = {
+            Get-LatestVersion -CurrentVersion $version
+        }
+        Summary = "Check the latest available version of PowerTool on GitHub."
+        Options = @{
+        }
+        Examples = @(
+            "powertool latest",
+            "pt check"
+        )
+    }
 }
 
-Export-ModuleMember -Function Show-Help, Write-ColoredOptions, Write-ColoredExample, Show-Version, Search-Commands, Test-ModuleCommands, Show-ExtensionInfo, Test-VersionRequirement, Install-Extension -Variable ModuleCommands
+Export-ModuleMember -Function Show-Help, Write-ColoredOptions, Write-ColoredExample, Show-Version, Search-Commands, Test-ModuleCommands, Show-ExtensionInfo, Test-VersionRequirement, Install-Extension, Update-PowerTool, Get-LatestVersion -Variable ModuleCommands

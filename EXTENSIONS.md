@@ -62,18 +62,18 @@ The `extension.json` file is required and defines the extension metadata and mod
 
 ### Manifest Properties
 
-| Property       | Required | Type   | Description                                            |
-| -------------- | -------- | ------ | ------------------------------------------------------ |
-| `name`         | Yes      | string | Unique extension identifier (lowercase, hyphens)       |
-| `description`  | Yes      | string | Brief description of extension functionality           |
-| `version`      | No       | string | Semantic version (default: "1.0.0")                    |
-| `author`       | No       | string | Extension author name                                  |
-| `license`      | No       | string | License identifier (e.g., "MIT", "GPL-3.0")            |
-| `homepage`     | No       | string | Extension homepage or repository URL                   |
-| `source`       | No       | string | Git repository URL for cloning the extension source    |
-| `modules`      | Yes      | array  | List of PowerShell module files to load                |
-| `dependencies` | No       | object | Extension dependencies (see format requirements below) |
-| `keywords`     | No       | array  | Keywords for extension discovery                       |
+| Property       | Required | Type   | Description                                                       |
+| -------------- | -------- | ------ | ----------------------------------------------------------------- |
+| `name`         | Yes      | string | Unique extension identifier (lowercase, hyphens)                  |
+| `description`  | Yes      | string | Brief description of extension functionality                      |
+| `version`      | No       | string | Semantic version (default: "1.0.0"). Should align with a Git tag. |
+| `author`       | No       | string | Extension author name                                             |
+| `license`      | No       | string | License identifier (e.g., "MIT", "GPL-3.0")                       |
+| `homepage`     | No       | string | Extension homepage or repository URL                              |
+| `source`       | No       | string | Git repository URL for cloning the extension source               |
+| `modules`      | Yes      | array  | List of PowerShell module files to load                           |
+| `dependencies` | No       | object | Extension dependencies (see format requirements below)            |
+| `keywords`     | No       | array  | Keywords for extension discovery                                  |
 
 ### Dependency Format Requirements
 
@@ -551,6 +551,193 @@ finally {
         $fileStream.Dispose()
     }
 }
+```
+
+### 6. Extension Versioning with Git Tags
+
+Proper versioning is crucial for PowerTool's extension installation system. Follow these practices to ensure users can install specific versions of your extension:
+
+#### Version Format
+
+Use [semantic versioning](https://semver.org/) in your `extension.json`:
+
+```json
+{
+    "name": "my-extension",
+    "version": "1.2.3",
+    "description": "My awesome extension"
+}
+```
+
+#### Git Tag Creation Process
+
+When releasing a new version of your extension:
+
+1. **Update the version in `extension.json`**:
+
+    ```json
+    {
+        "version": "1.1.0"
+    }
+    ```
+
+2. **Commit the version change**:
+
+    ```bash
+    git add extension.json
+    git commit -m "Bump version to 1.1.0"
+    ```
+
+3. **Create a Git tag that matches the version**:
+
+    ```bash
+    # Create an annotated tag (recommended)
+    git tag -a v1.1.0 -m "Release version 1.1.0"
+
+    # Or create a lightweight tag
+    git tag v1.1.0
+    ```
+
+4. **Push both the commit and the tag**:
+
+    ```bash
+    git push origin main
+    git push origin v1.1.0
+
+    # Or push all tags at once
+    git push --tags
+    ```
+
+#### Tag Naming Conventions
+
+PowerTool's installation system supports flexible tag naming:
+
+-   **Recommended**: Use `v` prefix (e.g., `v1.0.0`, `v2.1.3`)
+-   **Also supported**: Without prefix (e.g., `1.0.0`, `2.1.3`)
+-   **Pre-release**: Use semantic versioning pre-release format (e.g., `v1.0.0-alpha.1`, `v2.0.0-beta.2`)
+
+The install command will automatically try both formats:
+
+```bash
+# These commands will work for either v1.0.0 or 1.0.0 tags
+powertool install username/extension 1.0.0
+powertool install username/extension v1.0.0
+```
+
+#### Version Examples
+
+**Basic versioning workflow**:
+
+```bash
+# Initial release
+echo '{"name": "my-ext", "version": "1.0.0"}' > extension.json
+git add extension.json
+git commit -m "Initial release v1.0.0"
+git tag v1.0.0
+git push origin main --tags
+
+# Bug fix release
+echo '{"name": "my-ext", "version": "1.0.1"}' > extension.json
+git add extension.json
+git commit -m "Fix critical bug - v1.0.1"
+git tag v1.0.1
+git push origin main --tags
+
+# Feature release
+echo '{"name": "my-ext", "version": "1.1.0"}' > extension.json
+git add extension.json
+git commit -m "Add new commands - v1.1.0"
+git tag v1.1.0
+git push origin main --tags
+```
+
+**Pre-release versioning**:
+
+```bash
+# Alpha release
+echo '{"name": "my-ext", "version": "2.0.0-alpha.1"}' > extension.json
+git add extension.json
+git commit -m "Alpha release for v2.0.0"
+git tag v2.0.0-alpha.1
+git push origin main --tags
+
+# Beta release
+echo '{"name": "my-ext", "version": "2.0.0-beta.1"}' > extension.json
+git add extension.json
+git commit -m "Beta release for v2.0.0"
+git tag v2.0.0-beta.1
+git push origin main --tags
+
+# Final release
+echo '{"name": "my-ext", "version": "2.0.0"}' > extension.json
+git add extension.json
+git commit -m "Release v2.0.0"
+git tag v2.0.0
+git push origin main --tags
+```
+
+#### User Installation Examples
+
+Once you've properly tagged your releases, users can install specific versions:
+
+```bash
+# Install latest version (from default branch)
+powertool install username/my-extension
+
+# Install specific stable release
+powertool install username/my-extension v1.2.0
+powertool install username/my-extension 1.2.0
+
+# Install pre-release version
+powertool install username/my-extension v2.0.0-beta.1
+
+# Install from specific branch (for development)
+powertool install username/my-extension develop
+
+# Install from specific commit hash
+powertool install username/my-extension a1b2c3d4
+```
+
+#### Version Validation
+
+PowerTool will validate that the version in your `extension.json` matches what users expect:
+
+-   When users install a tagged version, PowerTool checks that the `version` field in `extension.json` is consistent
+-   This helps prevent confusion and ensures users get the version they intended
+
+#### Best Practices Summary
+
+1. **Always update `extension.json` before tagging**
+2. **Use consistent tag naming** (preferably with `v` prefix)
+3. **Create annotated tags with descriptive messages**
+4. **Push both commits and tags to your repository**
+5. **Follow semantic versioning principles**
+6. **Test your extension before creating release tags**
+7. **Document breaking changes in major version updates**
+
+#### Troubleshooting Version Issues
+
+If users report installation issues:
+
+1. **Check that tags exist**: `git tag -l`
+2. **Verify tag is pushed**: Check your repository's tags on GitHub/GitLab
+3. **Ensure version in `extension.json` matches tag name** (minus the `v` prefix)
+4. **Test installation yourself**: `powertool install yourusername/yourextension tagname`
+
+Example debugging commands:
+
+```bash
+# List all tags
+git tag -l
+
+# Show tag details
+git show v1.0.0
+
+# Check if tag exists on remote
+git ls-remote --tags origin
+
+# Force push tags if needed
+git push origin --tags --force
 ```
 
 ## Example: Complete File Management Extension

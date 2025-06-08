@@ -997,6 +997,165 @@ function Show-ExtensionInfo {
     }
 }
 
+function Install-Extension {
+    param(
+        [string]$ExtensionSource,
+        [string]$VersionToInstall, # e.g., v1.0.0, main, a_commit_hash
+        [switch]$Force
+    )
+
+    if (-not $ExtensionSource) {
+        Write-Host "Please specify an extension source to install." -ForegroundColor Red
+        Write-Host "Usage: powertool install <username/repository_or_git-url> [version] [-Force]" -ForegroundColor White
+        return
+    }
+
+    # Check if git is available
+    try {
+        $null = & git --version 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Git not found"
+        }
+    } catch {
+        Write-Host "Git is required to install extensions. Please install Git and ensure it's in your PATH." -ForegroundColor Red
+        return
+    }
+
+    # Determine the Git URL and extension name
+    $gitUrl = ""
+    $extensionName = ""
+
+    if ($ExtensionSource -match "^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$") {
+        # GitHub shorthand format: username/repository
+        $gitUrl = "https://github.com/$ExtensionSource.git"
+        $extensionName = ($ExtensionSource -split '/')[1]
+    } elseif ($ExtensionSource -match "^https?://.*") {
+        # Full Git URL
+        $gitUrl = $ExtensionSource
+        if ($ExtensionSource -match "/([^/]+?)(\.git)?/?$") {
+            $extensionName = $matches[1] -replace '\.git$', ''
+        } else {
+            Write-Host "Could not determine extension name from URL: $ExtensionSource" -ForegroundColor Red
+            return
+        }
+    } else {
+        Write-Host "Invalid extension source format: $ExtensionSource" -ForegroundColor Red
+        Write-Host "Use either 'username/repository' or a full Git URL." -ForegroundColor White
+        return
+    }
+
+    # Determine extensions directory (assuming Help.psm1 is in 'modules' one level down from PSScriptRoot of powertool.ps1)
+    # $PSScriptRoot for a module file is the module's directory.
+    $powerToolRoot = (Get-Item $PSScriptRoot).Parent.FullName
+    $extensionsPath = Join-Path $powerToolRoot "extensions"
+
+    if (-not (Test-Path $extensionsPath)) {
+        try {
+            New-Item -Path $extensionsPath -ItemType Directory -Force | Out-Null
+            Write-Host "Created extensions directory: $extensionsPath" -ForegroundColor Green
+        } catch {
+            Write-Host "Failed to create extensions directory: $($_.Exception.Message)" -ForegroundColor Red
+            return
+        }
+    }
+
+    $targetPath = Join-Path $extensionsPath $extensionName
+
+    if (Test-Path $targetPath) {
+        if (-not $Force) {
+            Write-Host "Extension '$extensionName' already exists at: $targetPath" -ForegroundColor Yellow
+            Write-Host "Use -Force to overwrite the existing extension." -ForegroundColor White
+            return
+        } else {
+            Write-Host "Removing existing extension '$extensionName' due to -Force flag..." -ForegroundColor Yellow
+            try {
+                Remove-Item -Path $targetPath -Recurse -Force
+            } catch {
+                Write-Host "Failed to remove existing extension: $($_.Exception.Message)" -ForegroundColor Red
+                return
+            }
+        }
+    }
+
+    Write-Host "Installing extension: " -NoNewline -ForegroundColor White
+    Write-Host $extensionName -ForegroundColor Cyan
+    Write-Host "Source: " -NoNewline -ForegroundColor White
+    Write-Host $gitUrl -ForegroundColor Blue
+    if ($VersionToInstall) {
+        Write-Host "Version: " -NoNewline -ForegroundColor White
+        Write-Host $VersionToInstall -ForegroundColor Yellow
+    }
+
+    try {
+        Write-Host "Cloning repository..." -ForegroundColor DarkGray
+        $cloneResult = & git clone $gitUrl $targetPath 2>&1
+
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Failed to clone repository:" -ForegroundColor Red
+            Write-Host $cloneResult -ForegroundColor Red
+            return
+        }
+        Write-Host "Successfully cloned repository to $targetPath" -ForegroundColor Green
+
+        if ($VersionToInstall) {
+            Write-Host "Attempting to checkout version: '$VersionToInstall'..." -ForegroundColor DarkGray
+            $originalLocation = Get-Location
+            try {
+                Set-Location $targetPath
+                $checkoutResult = & git checkout $VersionToInstall 2>&1
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Host "Failed to checkout version '$VersionToInstall'." -ForegroundColor Yellow
+                    # Try with "v" prefix if not already present
+                    if (-not $VersionToInstall.StartsWith("v")) {
+                        $vPrefixedVersion = "v$VersionToInstall"
+                        Write-Host "Attempting to checkout version: '$vPrefixedVersion'..." -ForegroundColor DarkGray
+                        $checkoutResult = & git checkout $vPrefixedVersion 2>&1
+                        if ($LASTEXITCODE -ne 0) {
+                            Write-Host "Failed to checkout version '$vPrefixedVersion':" -ForegroundColor Red
+                            Write-Host $checkoutResult -ForegroundColor Red
+                            Write-Host "The repository is cloned, but it might be on the default branch." -ForegroundColor Yellow
+                        } else {
+                            Write-Host "Successfully checked out version '$vPrefixedVersion'." -ForegroundColor Green
+                        }
+                    } else {
+                        # Original version already had "v", and it failed.
+                        Write-Host $checkoutResult -ForegroundColor Red
+                        Write-Host "The repository is cloned, but it might be on the default branch." -ForegroundColor Yellow
+                    }
+                } else {
+                    Write-Host "Successfully checked out version '$VersionToInstall'." -ForegroundColor Green
+                }
+            } catch {
+                Write-Host "An error occurred during git checkout: $($_.Exception.Message)" -ForegroundColor Red
+            } finally {
+                Set-Location $originalLocation
+            }
+        }
+
+        $manifestPath = Join-Path $targetPath "extension.json"
+        if (-not (Test-Path $manifestPath)) {
+            Write-Host "Warning: No extension.json manifest found in the repository. This may not be a valid PowerTool extension." -ForegroundColor Yellow
+            Write-Host "Extension files are located at: $targetPath" -ForegroundColor White
+            return
+        }
+
+        $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+        Write-Host ""
+        Write-Host "Extension '$($manifest.name)' installed successfully!" -ForegroundColor Green
+        Write-Host "  Description: $($manifest.description)" -ForegroundColor White
+        Write-Host "  Version: $(if ($manifest.version) { $manifest.version } else { 'N/A' })" -ForegroundColor Yellow
+        Write-Host "  Author: $(if ($manifest.author) { $manifest.author } else { 'Unknown' })" -ForegroundColor White
+        Write-Host "Note: Restart PowerTool to load the new extension and its commands." -ForegroundColor Yellow
+
+    } catch {
+        Write-Host "An error occurred during installation: $($_.Exception.Message)" -ForegroundColor Red
+        if (Test-Path $targetPath) {
+            Write-Host "Cleaning up failed installation attempt at $targetPath..." -ForegroundColor DarkGray
+            Remove-Item -Path $targetPath -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 $script:ModuleCommands = @{
     "help" = @{
         Aliases = @("h")
@@ -1074,6 +1233,28 @@ $script:ModuleCommands = @{
             "pt val"
         )
     }
+    "install" = @{
+        Aliases = @("i", "add", "get")
+        Action = {
+            # $Value1 is source, $Value2 is version/git-ref, $Force is global switch
+            Install-Extension -ExtensionSource $Value1 -VersionToInstall $Value2 -Force:$Force
+        }
+        Summary = "Install an extension from a GitHub repository or Git URL, optionally at a specific version/tag/branch."
+        Options = @{
+            0 = @( # First syntax group
+                @{ Token = "source"; Type = "Argument"; Description = "GitHub repo (username/repository) or full Git URL." }
+                @{ Token = "version"; Type = "OptionalArgument"; Description = "Specific git ref (branch, tag, commit) to install." }
+                @{ Token = "Force"; Type = "OptionalParameter"; Description = "Overwrite if the extension already exists." }
+            )
+        }
+        Examples = @(
+            "powertool install username/my-extension",
+            "powertool install username/another-extension v1.2.0",
+            "powertool install https://github.com/user/extension.git main-branch",
+            "pt add user/tool specific-commit-hash -Force",
+            "pt get someuser/some-repo"
+        )
+    }
 }
 
-Export-ModuleMember -Function Show-Help, Write-ColoredOptions, Write-ColoredExample, Show-Version, Search-Commands, Test-ModuleCommands, Show-ExtensionInfo, Test-VersionRequirement -Variable ModuleCommands
+Export-ModuleMember -Function Show-Help, Write-ColoredOptions, Write-ColoredExample, Show-Version, Search-Commands, Test-ModuleCommands, Show-ExtensionInfo, Test-VersionRequirement, Install-Extension -Variable ModuleCommands

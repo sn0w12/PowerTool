@@ -7,7 +7,8 @@ param (
     [int]$MinSize = 0,
     [string]$Pattern,
     [switch]$Recursive,
-    [switch]$Update
+    [switch]$Update,
+    [switch]$Force
 )
 
 $script:version = "0.1.0"

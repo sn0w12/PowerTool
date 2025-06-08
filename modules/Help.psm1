@@ -688,7 +688,7 @@ function Test-ModuleCommands {
                         $color = "Red"
                     }
 
-                    Write-Host "    $status $depName $depVersion" -ForegroundColor $color
+                    Write-Host "    $status ${depName} $depVersion" -ForegroundColor $color
                 }
             }
         }
@@ -774,6 +774,102 @@ function Test-VersionRequirement {
 
         Write-Verbose "String comparison result: $result"
         return $result
+    }
+}
+
+function Show-ExtensionInfo {
+    param(
+        [string]$ExtensionName,
+        [hashtable]$Extensions = @{}
+    )
+
+    if ($ExtensionName) {
+        # Show details for specific extension
+        if ($Extensions.ContainsKey($ExtensionName)) {
+            $extension = $Extensions[$ExtensionName]
+
+            Write-Host "Extension Details:" -ForegroundColor Blue
+            Write-Host "  Name: " -NoNewline -ForegroundColor White
+            Write-Host $extension.Name -ForegroundColor Cyan
+            Write-Host "  Description: " -NoNewline -ForegroundColor White
+            Write-Host $extension.Description -ForegroundColor White
+            Write-Host "  Version: " -NoNewline -ForegroundColor White
+            Write-Host $extension.Version -ForegroundColor Yellow
+            Write-Host "  Author: " -NoNewline -ForegroundColor White
+            Write-Host $extension.Author -ForegroundColor White
+
+            if ($extension.License) {
+                Write-Host "  License: " -NoNewline -ForegroundColor White
+                Write-Host $extension.License -ForegroundColor White
+            }
+
+            if ($extension.Homepage) {
+                Write-Host "  Homepage: " -NoNewline -ForegroundColor White
+                Write-Host $extension.Homepage -ForegroundColor Blue
+            }
+
+            if ($extension.Source) {
+                Write-Host "  Source: " -NoNewline -ForegroundColor White
+                Write-Host $extension.Source -ForegroundColor Green
+            }
+
+            Write-Host "  Path: " -NoNewline -ForegroundColor White
+            Write-Host $extension.Path -ForegroundColor DarkGray
+
+            if ($extension.Keywords -and $extension.Keywords.Count -gt 0) {
+                Write-Host "  Keywords: " -NoNewline -ForegroundColor White
+                Write-Host ($extension.Keywords -join ", ") -ForegroundColor DarkYellow
+            }
+
+            Write-Host "  Modules: " -NoNewline -ForegroundColor White
+            Write-Host ($extension.Modules -join ", ") -ForegroundColor DarkCyan
+
+            Write-Host "  Commands: " -NoNewline -ForegroundColor White
+            Write-Host ($extension.LoadedCommands -join ", ") -ForegroundColor Cyan
+
+            if ($extension.Dependencies -and $extension.Dependencies.Count -gt 0) {
+                Write-Host "  Dependencies:" -ForegroundColor White
+                foreach ($depName in $extension.Dependencies.Keys) {
+                    $depVersion = $extension.Dependencies[$depName]
+                    Write-Host "    ${depName}: $depVersion" -ForegroundColor DarkGray
+                }
+            }
+        } else {
+            Write-Host "Extension '$ExtensionName' not found." -ForegroundColor Red
+            Write-Host "Use 'powertool extension' to see all loaded extensions." -ForegroundColor White
+        }
+    } else {
+        # Show list of all extensions
+        Write-Header
+        Write-Host "Loaded Extensions:" -ForegroundColor Blue
+        Write-Host ""
+
+        if ($Extensions.Count -eq 0) {
+            Write-Host "No extensions are currently loaded." -ForegroundColor DarkGray
+            Write-Host "Extensions should be placed in the 'extensions/' directory." -ForegroundColor White
+            return
+        }
+
+        $sortedExtensions = $Extensions.Keys | Sort-Object
+        foreach ($extName in $sortedExtensions) {
+            $extension = $Extensions[$extName]
+
+            Write-Host "  " -NoNewline
+            Write-Host $extension.Name -NoNewline -ForegroundColor Cyan
+            Write-Host " v$($extension.Version)" -NoNewline -ForegroundColor Yellow
+            Write-Host " by " -NoNewline -ForegroundColor DarkGray
+            Write-Host $extension.Author -ForegroundColor White
+            Write-Host "    $($extension.Description)" -ForegroundColor White
+            Write-Host "    Commands: " -NoNewline -ForegroundColor DarkGray
+            Write-Host ($extension.LoadedCommands -join ", ") -ForegroundColor DarkCyan
+
+            if ($extension.Source) {
+                Write-Host "    Source: " -NoNewline -ForegroundColor DarkGray
+                Write-Host $extension.Source -ForegroundColor Green
+            }
+
+            Write-Host ""
+        }
     }
 }
 

@@ -45,6 +45,7 @@ The `extension.json` file is required and defines the extension metadata and mod
     "author": "Developer Name",
     "license": "MIT",
     "homepage": "https://github.com/user/powertool-extension",
+    "source": "https://github.com/user/powertool-extension.git",
     "modules": [
         "modules/CoreModule.psm1",
         "modules/UtilityModule.psm1",
@@ -67,6 +68,7 @@ The `extension.json` file is required and defines the extension metadata and mod
 | `author`       | No       | string | Extension author name                                   |
 | `license`      | No       | string | License identifier (e.g., "MIT", "GPL-3.0")             |
 | `homepage`     | No       | string | Extension homepage or repository URL                    |
+| `source`       | No       | string | Git repository URL for cloning the extension source     |
 | `modules`      | Yes      | array  | List of PowerShell module files to load                 |
 | `dependencies` | No       | object | Version requirements for PowerTool and other extensions |
 | `keywords`     | No       | array  | Keywords for extension discovery                        |

@@ -1145,6 +1145,105 @@ function Install-Extension {
         Write-Host "  Description: $($manifest.description)" -ForegroundColor White
         Write-Host "  Version: $(if ($manifest.version) { $manifest.version } else { 'N/A' })" -ForegroundColor Yellow
         Write-Host "  Author: $(if ($manifest.author) { $manifest.author } else { 'Unknown' })" -ForegroundColor White
+
+        # Check dependencies
+        if ($manifest.dependencies) {
+            Write-Host ""
+            Write-Host "Checking dependencies..." -ForegroundColor Blue
+
+            $missingDependencies = @()
+            $deps = @{}
+
+            # Convert dependencies to hashtable if it's a PSCustomObject
+            if ($manifest.dependencies -is [PSCustomObject]) {
+                $manifest.dependencies.PSObject.Properties | ForEach-Object {
+                    $deps[$_.Name] = $_.Value
+                }
+            } else {
+                $deps = $manifest.dependencies
+            }
+
+            foreach ($depName in $deps.Keys) {
+                $requiredVersion = $deps[$depName]
+
+                if ($depName -eq "powertool") {
+                    # Check PowerTool version - we'll assume current version is compatible for installation
+                    Write-Host "  PowerTool: " -NoNewline -ForegroundColor White
+                    Write-Host "Required $requiredVersion" -NoNewline -ForegroundColor Yellow
+                    Write-Host " [SKIP - Core dependency]" -ForegroundColor DarkGray
+                } else {
+                    # Check if extension dependency exists
+                    $dependencyFound = $false
+
+                    # Try to match by source URL first, then fall back to folder name
+                    foreach ($extName in (Get-ChildItem $extensionsPath -Directory).Name) {
+                        $extManifestPath = Join-Path $extensionsPath $extName "extension.json"
+
+                        if (Test-Path $extManifestPath) {
+                            try {
+                                $extManifest = Get-Content $extManifestPath -Raw | ConvertFrom-Json
+
+                                # Check if the dependency matches the extension's source field
+                                if ($extManifest.source -and $extManifest.source -eq $depName) {
+                                    $dependencyFound = $true
+                                    break
+                                }
+
+                                # Fallback: check if dependency name matches folder name (when no source is available)
+                                if (-not $extManifest.source -and $extName -eq (Split-Path $depName -Leaf)) {
+                                    $dependencyFound = $true
+                                    break
+                                }
+                            } catch {
+                                # Skip extensions with invalid manifests
+                                continue
+                            }
+                        }
+                    }
+
+                    if ($dependencyFound) {
+                        Write-Host "  ${depName}: " -NoNewline -ForegroundColor White
+                        Write-Host "[FOUND]" -ForegroundColor Green
+                    } else {
+                        Write-Host "  ${depName}: " -NoNewline -ForegroundColor White
+                        Write-Host "[MISSING]" -ForegroundColor Red
+                        $missingDependencies += $depName
+                    }
+                }
+            }
+
+            if ($missingDependencies.Count -gt 0) {
+                Write-Host ""
+                Write-Host "Missing dependencies found: $($missingDependencies.Count)" -ForegroundColor Yellow
+                foreach ($dep in $missingDependencies) {
+                    Write-Host "  - $dep" -ForegroundColor Yellow
+                }
+
+                Write-Host ""
+                $response = Read-Host "Would you like to install the missing dependencies? (y/N)"
+
+                if ($response -match "^[yY]([eE][sS])?$") {
+                    Write-Host ""
+                    Write-Host "Installing dependencies..." -ForegroundColor Green
+
+                    foreach ($dep in $missingDependencies) {
+                        Write-Host ""
+                        Write-Host "Installing dependency: " -NoNewline -ForegroundColor White
+                        Write-Host $dep -ForegroundColor Cyan
+
+                        # Recursively call Install-Extension for each dependency
+                        Install-Extension -ExtensionSource $dep
+                    }
+                } else {
+                    Write-Host "Skipping dependency installation." -ForegroundColor Yellow
+                    Write-Host "Note: The extension may not work correctly without its dependencies." -ForegroundColor Yellow
+                }
+            } else {
+                Write-Host "All dependencies satisfied!" -ForegroundColor Green
+            }
+        }
+
+        Write-Host ""
         Write-Host "Note: Restart PowerTool to load the new extension and its commands." -ForegroundColor Yellow
 
     } catch {

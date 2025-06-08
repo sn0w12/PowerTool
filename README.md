@@ -120,7 +120,7 @@ PowerTool stores settings in `%APPDATA%\PowerTool\settings.json`. Key settings i
 
 PowerTool supports a powerful extension system that allows developers to create custom commands and functionality. Extensions are automatically loaded from the `extensions/` directory.
 
-For detailed information on creating and developing extensions, see [EXTENSIONS.md](EXTENSIONS.md).
+For detailed information on creating and developing extensions, see [EXTENSIONS.md](docs/EXTENSIONS.md).
 
 ### Quick Extension Example
 

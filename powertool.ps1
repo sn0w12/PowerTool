@@ -96,8 +96,14 @@ if (Test-Path $extensionsPath) {
                     Name = $manifest.name
                     Description = $manifest.description
                     Version = if ($manifest.version) { $manifest.version } else { "1.0.0" }
+                    Author = if ($manifest.author) { $manifest.author } else { "Unknown" }
+                    License = if ($manifest.license) { $manifest.license } else { $null }
+                    Homepage = if ($manifest.homepage) { $manifest.homepage } else { $null }
+                    Keywords = if ($manifest.keywords) { $manifest.keywords } else { @() }
+                    Dependencies = if ($manifest.dependencies) { $manifest.dependencies } else { @{} }
                     Path = $extensionDir.FullName
                     Modules = @()
+                    LoadedCommands = @()
                 }
 
                 # Load extension modules
@@ -131,6 +137,7 @@ if (Test-Path $extensionsPath) {
 
                                         $script:commandDefinitions[$key] = $commandEntry
                                         $script:extensionCommands[$key] = $manifest.name
+                                        $extensionInfo.LoadedCommands += $key
                                     }
                                 }
                             }

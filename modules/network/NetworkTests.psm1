@@ -345,8 +345,8 @@ if (-not $script:ModuleCommands) {
 }
 
 $script:ModuleCommands = @{
-    "network" = @{
-        Aliases = @("net", "nettest", "speedtest")
+    "nettest" = @{
+        Aliases = @("net")
         Action = {
             $skipSpeed = $PSBoundParameters.ContainsKey('SkipSpeed') -and $SkipSpeed
             $fullTest = $PSBoundParameters.ContainsKey('Full') -and $Full

@@ -40,7 +40,6 @@ function Remove-SmallImages($dir, $minWidth, $minHeight) {
     }
 
     # Check core settings
-    $confirmDestructive = Get-Setting -Key "core.confirm-destructive"
     $verboseMode = Get-Setting -Key "core.verbose"
 
     # Pre-scan to count files that will be removed
@@ -68,10 +67,10 @@ function Remove-SmallImages($dir, $minWidth, $minHeight) {
         }
     }
 
-    if ($confirmDestructive -and $filesToRemove.Count -gt 0) {
-        $response = Read-Host "Are you sure you want to delete $($filesToRemove.Count) image(s) smaller than ${minWidth}x${minHeight} from '$dir'? (y/N)"
-        if ($response -notmatch '^[Yy]([Ee][Ss])?$') {
-            Write-Host "Operation cancelled." -ForegroundColor Yellow
+    if ($filesToRemove.Count -gt 0) {
+        $confirmed = Confirm-DestructiveOperation -Message "Are you sure you want to delete $($filesToRemove.Count) image(s) smaller than ${minWidth}x${minHeight} from '$dir'?"
+
+        if (-not $confirmed) {
             return
         }
     }

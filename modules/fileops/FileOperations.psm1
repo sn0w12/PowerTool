@@ -35,15 +35,13 @@ function Rename-FilesRandomly($dir, $recursive = $false) {
         Get-ChildItem -Path $dir -File
     }
 
-    # Check core settings for confirmation and verbose mode
-    $confirmDestructive = Get-Setting -Key "core.confirm-destructive"
+    # Check core settings for verbose mode
     $verboseMode = Get-Setting -Key "core.verbose"
 
-    if ($confirmDestructive -and $files.Count -gt 0) {
+    if ($files.Count -gt 0) {
         $recursiveText = if ($recursive) { " recursively" } else { "" }
-        $response = Read-Host "Are you sure you want to rename $($files.Count) file(s)${recursiveText} in '$dir' with random names? (y/N)"
-        if ($response -notmatch '^[Yy]([Ee][Ss])?$') {
-            Write-Host "Operation cancelled." -ForegroundColor Yellow
+        $confirmed = Confirm-DestructiveOperation -Message "Are you sure you want to rename $($files.Count) file(s)${recursiveText} in '$dir' with random names?"
+        if (-not $confirmed) {
             return
         }
     }
@@ -76,15 +74,10 @@ function Merge-Directory($dir) {
     $files = Get-ChildItem -Path $dir -File -Recurse | Where-Object { $_.DirectoryName -ne $dir }
 
     # Check core settings
-    $confirmDestructive = Get-Setting -Key "core.confirm-destructive"
     $verboseMode = Get-Setting -Key "core.verbose"
-
-    if ($confirmDestructive -and $files.Count -gt 0) {
-        $response = Read-Host "Are you sure you want to flatten directory '$dir' and move $($files.Count) file(s) to the root? (y/N)"
-        if ($response -notmatch '^[Yy]([Ee][Ss])?$') {
-            Write-Host "Operation cancelled." -ForegroundColor Yellow
-            return
-        }
+    $confirmed = Confirm-DestructiveOperation -Message "Are you sure you want to flatten directory '$dir' and move $($files.Count) file(s) to the root?"
+    if (-not $confirmed) {
+        return
     }
 
     $movedCount = 0
@@ -875,13 +868,11 @@ function Remove-TextFromFiles($dir, $pattern) {
     $txtFiles = Get-ChildItem -Path $dir -Filter "*.txt" -File -Recurse
 
     # Check core settings
-    $confirmDestructive = Get-Setting -Key "core.confirm-destructive"
     $verboseMode = Get-Setting -Key "core.verbose"
 
-    if ($confirmDestructive -and $txtFiles.Count -gt 0) {
-        $response = Read-Host "Are you sure you want to modify $($txtFiles.Count) text file(s) in '$dir' using pattern '$pattern'? (y/N)"
-        if ($response -notmatch '^[Yy]([Ee][Ss])?$') {
-            Write-Host "Operation cancelled." -ForegroundColor Yellow
+    if ($txtFiles.Count -gt 0) {
+        $confirmed = Confirm-DestructiveOperation -Message "Are you sure you want to modify $($txtFiles.Count) text file(s) in '$dir' using pattern '$pattern'?"
+        if (-not $confirmed) {
             return
         }
     }

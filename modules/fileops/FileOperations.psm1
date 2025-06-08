@@ -1043,149 +1043,180 @@ function Search-Files($path, $name = $null, $content = $null, $extension = $null
         return
     }
 
-    # Build Get-ChildItem parameters
-    $getChildItemParams = @{
-        Path = $path
-        File = $true
-    }
+    $initialLoader = $null
+    $filteredFiles = @()
 
-    if ($recursive) {
-        $getChildItemParams.Recurse = $true
-    }
+    try {
+        # Build Get-ChildItem parameters
+        $getChildItemParams = @{
+            Path = $path
+            File = $true
+        }
 
-    # Get all files first
-    $allFiles = Get-ChildItem @getChildItemParams
+        if ($recursive) {
+            $getChildItemParams.Recurse = $true
+        }
 
-    # Apply filters
-    $filteredFiles = $allFiles
+        if ($hasSearchCriteria) {
+            # Start a general loader for file gathering and initial filtering
+            $initialLoader = Start-Loader -Message "Searching files " -Style "Spinner" -Color "Cyan"
+        }
 
-    # Name filter (supports wildcards, exact contains, and fuzzy matching)
-    if ($name) {
-        if ($name.Contains('*') -or $name.Contains('?')) {
-            # Use wildcard matching
-            if ($caseSensitive) {
-                $filteredFiles = $filteredFiles | Where-Object { $_.Name -clike $name }
-            } else {
-                $filteredFiles = $filteredFiles | Where-Object { $_.Name -like $name }
-            }
-        } else {
-            # For simple text, use contains first, then fuzzy matching for broader results
-            $exactMatches = @()
-            $fuzzyMatches = @()
+        # Get all files first
+        $allFiles = Get-ChildItem @getChildItemParams
 
-            foreach ($file in $filteredFiles) {
-                # First try exact contains matching
-                $fileName = if ($caseSensitive) { $file.Name } else { $file.Name.ToLower() }
-                $searchName = if ($caseSensitive) { $name } else { $name.ToLower() }
+        # Apply filters
+        $filteredFiles = $allFiles
 
-                if ($fileName.Contains($searchName)) {
-                    $exactMatches += $file
+        # Name filter (supports wildcards, exact contains, and fuzzy matching)
+        if ($name) {
+            if ($name.Contains('*') -or $name.Contains('?')) {
+                # Use wildcard matching
+                if ($caseSensitive) {
+                    $filteredFiles = $filteredFiles | Where-Object { $_.Name -clike $name }
                 } else {
-                    # Use fuzzy matching for potential matches
-                    $distance = Get-LevenshteinDistance -String1 $fileName -String2 $searchName -CaseSensitive:$caseSensitive
-                    $maxLength = [Math]::Max($fileName.Length, $searchName.Length)
-                    if ($maxLength -gt 0) {
-                        $similarity = 1 - ($distance / $maxLength)
-                        # Include files with reasonable similarity or partial matches
-                        if ($similarity -gt 0.3 -or $fileName.Contains($searchName.Substring(0, [Math]::Min(3, $searchName.Length)))) {
-                            $fuzzyMatches += $file
-                        }
-                    }
+                    $filteredFiles = $filteredFiles | Where-Object { $_.Name -like $name }
                 }
-            }
+            } else {
+                # For simple text, use contains first, then fuzzy matching for broader results
+                $exactMatches = @()
+                $fuzzyMatches = @()
 
-            # Combine exact matches first, then fuzzy matches
-            $filteredFiles = $exactMatches + $fuzzyMatches | Sort-Object Name -Unique
-        }
-    }
+                foreach ($file in $filteredFiles) {
+                    # First try exact contains matching
+                    $fileName = if ($caseSensitive) { $file.Name } else { $file.Name.ToLower() }
+                    $searchName = if ($caseSensitive) { $name } else { $name.ToLower() }
 
-    # Extension filter
-    if ($extension) {
-        if (-not $extension.StartsWith('.')) {
-            $extension = ".$extension"
-        }
-        if ($caseSensitive) {
-            $filteredFiles = $filteredFiles | Where-Object { $_.Extension -ceq $extension }
-        } else {
-            $filteredFiles = $filteredFiles | Where-Object { $_.Extension -ieq $extension }
-        }
-    }
-
-    # Size filters
-    if ($minSize) {
-        $minSizeBytes = Convert-SizeToBytes $minSize
-        if ($minSizeBytes -ne $null) {
-            $filteredFiles = $filteredFiles | Where-Object { $_.Length -ge $minSizeBytes }
-        }
-    }
-
-    if ($maxSize) {
-        $maxSizeBytes = Convert-SizeToBytes $maxSize
-        if ($maxSizeBytes -ne $null) {
-            $filteredFiles = $filteredFiles | Where-Object { $_.Length -le $maxSizeBytes }
-        }
-    }
-
-    # Date filters
-    if ($modifiedAfter) {
-        try {
-            $afterDate = [DateTime]::Parse($modifiedAfter)
-            $filteredFiles = $filteredFiles | Where-Object { $_.LastWriteTime -ge $afterDate }
-        }
-        catch {
-            Write-Warning "Invalid date format for modifiedAfter: $modifiedAfter"
-        }
-    }
-
-    if ($modifiedBefore) {
-        try {
-            $beforeDate = [DateTime]::Parse($modifiedBefore)
-            $filteredFiles = $filteredFiles | Where-Object { $_.LastWriteTime -le $beforeDate }
-        }
-        catch {
-            Write-Warning "Invalid date format for modifiedBefore: $modifiedBefore"
-        }
-    }
-
-    # Content search (for text files)
-    if ($content) {
-        $contentMatches = @()
-        $loader = $null
-        try {
-            # Reverted to original loader message and color
-            $loader = Start-Loader -Message "Searching file contents" -Style "Dots" -Color "Yellow"
-
-            foreach ($file in $filteredFiles) {
-                # Only search in files that are likely to be text files and not too large
-                if ($file.Length -lt 50MB -and $file.Extension -match '\.(txt|log|md|xml|json|csv|html?|css|js|ps1|psm1|psd1|py|java|c|cpp|h|cs|vb|sql|ini|cfg|conf|config)$') {
-                    try {
-                        $fileContent = Get-Content -Path $file.FullName -Raw -ErrorAction SilentlyContinue
-                        if ($fileContent) {
-                            $matchFound = if ($caseSensitive) {
-                                $fileContent -cmatch [regex]::Escape($content)
-                            } else {
-                                $fileContent -imatch [regex]::Escape($content)
-                            }
-
-                            if ($matchFound) {
-                                $contentMatches += $file
+                    if ($fileName.Contains($searchName)) {
+                        $exactMatches += $file
+                    } else {
+                        # Use fuzzy matching for potential matches
+                        $distance = Get-LevenshteinDistance -String1 $fileName -String2 $searchName -CaseSensitive:$caseSensitive
+                        $maxLength = [Math]::Max($fileName.Length, $searchName.Length)
+                        if ($maxLength -gt 0) {
+                            $similarity = 1 - ($distance / $maxLength)
+                            # Include files with reasonable similarity or partial matches
+                            if ($similarity -gt 0.3 -or $fileName.Contains($searchName.Substring(0, [Math]::Min(3, $searchName.Length)))) {
+                                $fuzzyMatches += $file
                             }
                         }
                     }
-                    catch {
-                        if ($verboseMode) {
-                            Write-Host "Could not search content in: $($file.Name)" -ForegroundColor DarkRed
+                }
+
+                # Combine exact matches first, then fuzzy matches
+                $filteredFiles = $exactMatches + $fuzzyMatches | Sort-Object Name -Unique
+            }
+        }
+
+        # Extension filter
+        if ($extension) {
+            if (-not $extension.StartsWith('.')) {
+                $extension = ".$extension"
+            }
+            if ($caseSensitive) {
+                $filteredFiles = $filteredFiles | Where-Object { $_.Extension -ceq $extension }
+            } else {
+                $filteredFiles = $filteredFiles | Where-Object { $_.Extension -ieq $extension }
+            }
+        }
+
+        # Size filters
+        if ($minSize) {
+            $minSizeBytes = Convert-SizeToBytes $minSize
+            if ($minSizeBytes -ne $null) {
+                $filteredFiles = $filteredFiles | Where-Object { $_.Length -ge $minSizeBytes }
+            }
+        }
+
+        if ($maxSize) {
+            $maxSizeBytes = Convert-SizeToBytes $maxSize
+            if ($maxSizeBytes -ne $null) {
+                $filteredFiles = $filteredFiles | Where-Object { $_.Length -le $maxSizeBytes }
+            }
+        }
+
+        # Date filters
+        if ($modifiedAfter) {
+            try {
+                $afterDate = [DateTime]::Parse($modifiedAfter)
+                $filteredFiles = $filteredFiles | Where-Object { $_.LastWriteTime -ge $afterDate }
+            }
+            catch {
+                Write-Warning "Invalid date format for modifiedAfter: $modifiedAfter"
+            }
+        }
+
+        if ($modifiedBefore) {
+            try {
+                $beforeDate = [DateTime]::Parse($modifiedBefore)
+                $filteredFiles = $filteredFiles | Where-Object { $_.LastWriteTime -le $beforeDate }
+            }
+            catch {
+                Write-Warning "Invalid date format for modifiedBefore: $modifiedBefore"
+            }
+        }
+
+        # If content search is requested, pre-filter $filteredFiles to only include text-searchable file types
+        if ($content) {
+            $filteredFiles = $filteredFiles | Where-Object { $_.Length -lt 50MB -and $_.Extension -match '\.(txt|log|md|xml|json|csv|html?|css|js|ps1|psm1|psd1|py|java|c|cpp|h|cs|vb|sql|ini|cfg|conf|config)$' }
+        }
+
+        # Stop the initial loader before content search or final display
+        if ($initialLoader) {
+            Stop-Loader $initialLoader
+            $initialLoader = $null
+        }
+
+        # Content search (for text files)
+        if ($content) {
+            $contentMatches = @()
+            # Use $filteredFiles (now pre-filtered for text types) as input for content search
+            if ($filteredFiles.Count -gt 0) {
+                $totalFilesToSearch = $filteredFiles.Count
+                $filesSearched = 0
+
+                # Initialize progress bar
+                Write-Progress -Activity "Searching file contents" -Status "Preparing to search..." -PercentComplete 0 -Id 1
+
+                foreach ($file in $filteredFiles) { # This loop now only processes pre-filtered text-like files
+                    $filesSearched++
+                    Write-Progress -Activity "Searching file contents" -Status "Scanning $($file.Name) ($filesSearched of $totalFilesToSearch)" -PercentComplete (($filesSearched / $totalFilesToSearch) * 100) -Id 1
+
+                    # The check for text-like files and size is still here as a safeguard,
+                    # but $filteredFiles should already meet these criteria.
+                    if ($file.Length -lt 50MB -and $file.Extension -match '\.(txt|log|md|xml|json|csv|html?|css|js|ps1|psm1|psd1|py|java|c|cpp|h|cs|vb|sql|ini|cfg|conf|config)$') {
+                        try {
+                            $fileContent = Get-Content -Path $file.FullName -Raw -ErrorAction SilentlyContinue
+                            if ($fileContent) {
+                                $matchFound = if ($caseSensitive) {
+                                    $fileContent -cmatch [regex]::Escape($content)
+                                } else {
+                                    $fileContent -imatch [regex]::Escape($content)
+                                }
+
+                                if ($matchFound) {
+                                    $contentMatches += $file
+                                }
+                            }
+                        }
+                        catch {
+                            if ($verboseMode) {
+                                Write-Host "Could not search content in: $($file.Name)" -ForegroundColor DarkRed
+                            }
                         }
                     }
                 }
+                if ($totalFilesToSearch -gt 0) {
+                    Write-Progress -Activity "Searching file contents" -Completed -Id 1
+                }
             }
+            $filteredFiles = $contentMatches
         }
-        finally {
-            if ($loader) {
-                Stop-Loader $loader
-            }
+    }
+    finally {
+        if ($initialLoader) {
+            Stop-Loader $initialLoader
         }
-        $filteredFiles = $contentMatches
     }
 
     # Display results

@@ -570,6 +570,129 @@ function Test-ModuleCommands {
     }
 }
 
+function Show-ExtensionInfo {
+    param(
+        [string]$ExtensionName,
+        [hashtable]$Extensions = @{}
+    )
+
+    if (-not $Extensions -or $Extensions.Count -eq 0) {
+        Write-Host "No extensions are currently loaded." -ForegroundColor Yellow
+        Write-Host "Place extensions in the 'extensions/' directory to load them automatically." -ForegroundColor White
+        return
+    }
+
+    if ($ExtensionName) {
+        # Show details for a specific extension
+        $extension = $Extensions[$ExtensionName]
+        if (-not $extension) {
+            Write-Host "Extension '$ExtensionName' not found." -ForegroundColor Red
+            Write-Host ""
+            Write-Host "Available extensions:" -ForegroundColor White
+            $Extensions.Keys | Sort-Object | ForEach-Object {
+                Write-Host "  $_" -ForegroundColor Green
+            }
+            return
+        }
+
+        Write-Header
+        Write-Host "Extension Details:" -ForegroundColor Blue
+        Write-Host ""
+
+        Write-Host "Name: " -NoNewline -ForegroundColor White
+        Write-Host $extension.Name -ForegroundColor Cyan
+
+        Write-Host "Description: " -NoNewline -ForegroundColor White
+        Write-Host $extension.Description -ForegroundColor White
+
+        Write-Host "Version: " -NoNewline -ForegroundColor White
+        Write-Host $extension.Version -ForegroundColor Yellow
+
+        if ($extension.Author -and $extension.Author -ne "Unknown") {
+            Write-Host "Author: " -NoNewline -ForegroundColor White
+            Write-Host $extension.Author -ForegroundColor White
+        }
+
+        if ($extension.License) {
+            Write-Host "License: " -NoNewline -ForegroundColor White
+            Write-Host $extension.License -ForegroundColor White
+        }
+
+        if ($extension.Homepage) {
+            Write-Host "Homepage: " -NoNewline -ForegroundColor White
+            Write-Host $extension.Homepage -ForegroundColor Blue
+        }
+
+        if ($extension.Keywords -and $extension.Keywords.Count -gt 0) {
+            Write-Host "Keywords: " -NoNewline -ForegroundColor White
+            Write-Host ($extension.Keywords -join ", ") -ForegroundColor DarkGray
+        }
+
+        Write-Host "Path: " -NoNewline -ForegroundColor White
+        Write-Host $extension.Path -ForegroundColor DarkGray
+
+        Write-Host ""
+        Write-Host "Modules ($($extension.Modules.Count)):" -ForegroundColor Blue
+        foreach ($module in $extension.Modules) {
+            Write-Host "  $module" -ForegroundColor White
+        }
+
+        Write-Host ""
+        Write-Host "Commands ($($extension.LoadedCommands.Count)):" -ForegroundColor Blue
+        if ($extension.LoadedCommands.Count -gt 0) {
+            foreach ($commandName in ($extension.LoadedCommands | Sort-Object)) {
+                Write-Host "  " -NoNewline
+                Write-Host $commandName -ForegroundColor Cyan
+            }
+        } else {
+            Write-Host "  No commands loaded" -ForegroundColor DarkGray
+        }
+
+        if ($extension.Dependencies -and $extension.Dependencies.Count -gt 0) {
+            Write-Host ""
+            Write-Host "Dependencies:" -ForegroundColor Blue
+            foreach ($dep in $extension.Dependencies.Keys) {
+                Write-Host "  ${dep}: " -NoNewline -ForegroundColor White
+                Write-Host $extension.Dependencies[$dep] -ForegroundColor Yellow
+            }
+        }
+    } else {
+        # Show list of all extensions
+        Write-Header
+        Write-Host "Loaded Extensions:" -ForegroundColor Blue
+        Write-Host ""
+
+        $sortedExtensions = $Extensions.Keys | Sort-Object
+        foreach ($extName in $sortedExtensions) {
+            $ext = $Extensions[$extName]
+            Write-Host "  " -NoNewline
+            Write-Host $ext.Name -NoNewline -ForegroundColor Cyan
+            Write-Host " v$($ext.Version)" -NoNewline -ForegroundColor Yellow
+
+            if ($ext.Author -and $ext.Author -ne "Unknown") {
+                Write-Host " by $($ext.Author)" -NoNewline -ForegroundColor White
+            }
+            Write-Host ""
+
+            Write-Host "    $($ext.Description)" -ForegroundColor White
+            Write-Host "    Commands: " -NoNewline -ForegroundColor DarkGray
+            if ($ext.LoadedCommands.Count -gt 0) {
+                Write-Host ($ext.LoadedCommands -join ", ") -ForegroundColor DarkCyan
+            } else {
+                Write-Host "none" -ForegroundColor DarkGray
+            }
+
+            if ($ext.Keywords -and $ext.Keywords.Count -gt 0) {
+                Write-Host "    Keywords: " -NoNewline -ForegroundColor DarkGray
+                Write-Host ($ext.Keywords -join ", ") -ForegroundColor DarkGray
+            }
+            Write-Host ""
+        }
+
+        Write-Host "Use 'powertool extension <name>' to see detailed information about a specific extension." -ForegroundColor White
+    }
+}
+
 $script:ModuleCommands = @{
     "help" = @{
         Aliases = @("h")
@@ -587,6 +710,23 @@ $script:ModuleCommands = @{
         Examples = @(
             "powertool help rename-random",
             "powertool help filter-images"
+        )
+    }
+    "extension" = @{
+        Aliases = @("ext", "extensions")
+        Action = {
+            Show-ExtensionInfo -ExtensionName $Value1 -Extensions $script:extensions
+        }
+        Summary = "Show information about loaded extensions or details for a specific extension."
+        Options = @{
+            0 = @(
+                @{ Token = "extension-name"; Type = "OptionalArgument"; Description = "The name of the extension to get details for." }
+            )
+        }
+        Examples = @(
+            "powertool extension",
+            "powertool extension example-extension",
+            "powertool ext file-manager"
         )
     }
     "search" = @{
@@ -630,4 +770,4 @@ $script:ModuleCommands = @{
     }
 }
 
-Export-ModuleMember -Function Show-Help, Write-ColoredOptions, Write-ColoredExample, Show-Version, Search-Commands, Test-ModuleCommands -Variable ModuleCommands
+Export-ModuleMember -Function Show-Help, Write-ColoredOptions, Write-ColoredExample, Show-Version, Search-Commands, Test-ModuleCommands, Show-ExtensionInfo -Variable ModuleCommands

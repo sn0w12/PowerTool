@@ -1257,7 +1257,8 @@ function Install-Extension {
 
 function Update-PowerTool {
     param(
-        [string]$PowerToolVersion
+        [string]$PowerToolVersion,
+        [string]$ToVersion
     )
 
     # Check if git is available
@@ -1286,6 +1287,11 @@ function Update-PowerTool {
     Write-Host "Current version: " -NoNewline -ForegroundColor White
     Write-Host "v$PowerToolVersion" -ForegroundColor Yellow
 
+    if ($ToVersion) {
+        Write-Host "Target version: " -NoNewline -ForegroundColor White
+        Write-Host $ToVersion -ForegroundColor Yellow
+    }
+
     try {
         $originalLocation = Get-Location
         Set-Location $powerToolRoot
@@ -1311,28 +1317,57 @@ function Update-PowerTool {
             return
         }
 
-        # Check if there are updates available
-        $behindCommits = & git rev-list --count HEAD..@{u} 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "Could not determine update status. Attempting pull anyway..." -ForegroundColor Yellow
-            $behindCommits = "unknown"
-        }
+        if ($ToVersion) {
+            # Update to specific version
+            Write-Host "Attempting to checkout version: '$ToVersion'..." -ForegroundColor Green
 
-        if ($behindCommits -eq "0") {
-            Write-Host "PowerTool is already up to date." -ForegroundColor Green
-            return
-        }
+            $checkoutResult = & git checkout $ToVersion 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                # Try with "v" prefix if not already present
+                if (-not $ToVersion.StartsWith("v")) {
+                    $vPrefixedVersion = "v$ToVersion"
+                    Write-Host "Attempting to checkout version: '$vPrefixedVersion'..." -ForegroundColor DarkGray
+                    $checkoutResult = & git checkout $vPrefixedVersion 2>&1
+                    if ($LASTEXITCODE -ne 0) {
+                        Write-Host "Failed to checkout version '$vPrefixedVersion':" -ForegroundColor Red
+                        Write-Host $checkoutResult -ForegroundColor Red
+                        return
+                    } else {
+                        Write-Host "Successfully checked out version '$vPrefixedVersion'." -ForegroundColor Green
+                    }
+                } else {
+                    Write-Host "Failed to checkout version '$ToVersion':" -ForegroundColor Red
+                    Write-Host $checkoutResult -ForegroundColor Red
+                    return
+                }
+            } else {
+                Write-Host "Successfully checked out version '$ToVersion'." -ForegroundColor Green
+            }
+        } else {
+            # Update to latest (git pull)
+            # Check if there are updates available
+            $behindCommits = & git rev-list --count HEAD..@{u} 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "Could not determine update status. Attempting pull anyway..." -ForegroundColor Yellow
+                $behindCommits = "unknown"
+            }
 
-        if ($behindCommits -ne "unknown") {
-            Write-Host "Found $behindCommits new commit(s). Pulling changes..." -ForegroundColor Green
-        }
+            if ($behindCommits -eq "0") {
+                Write-Host "PowerTool is already up to date." -ForegroundColor Green
+                return
+            }
 
-        # Perform git pull
-        $pullResult = & git pull 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "Failed to pull updates:" -ForegroundColor Red
-            Write-Host $pullResult -ForegroundColor Red
-            return
+            if ($behindCommits -ne "unknown") {
+                Write-Host "Found $behindCommits new commit(s). Pulling changes..." -ForegroundColor Green
+            }
+
+            # Perform git pull
+            $pullResult = & git pull 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "Failed to pull updates:" -ForegroundColor Red
+                Write-Host $pullResult -ForegroundColor Red
+                return
+            }
         }
 
         Write-Host "PowerTool updated successfully!" -ForegroundColor Green
@@ -1527,14 +1562,19 @@ $script:ModuleCommands = @{
     "update" = @{
         Aliases = @("upgrade", "up")
         Action = {
-            Update-PowerTool -PowerToolVersion $version
+            Update-PowerTool -PowerToolVersion $version -ToVersion $Value1
         }
-        Summary = "Update PowerTool to the latest version using git pull."
+        Summary = "Update PowerTool to the latest version or a specific version using git."
         Options = @{
+            0 = @(
+                @{ Token = "version"; Type = "OptionalArgument"; Description = "Specific version, tag, or branch to update to. If not specified, updates to latest." }
+            )
         }
         Examples = @(
             "powertool update",
-            "pt up"
+            "powertool update v1.2.0",
+            "powertool update main",
+            "pt up v0.5.0"
         )
     }
     "latest" = @{

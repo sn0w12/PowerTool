@@ -1627,6 +1627,26 @@ $script:ModuleCommands = @{
             "pt check"
         )
     }
+    "colors" = @{
+        Aliases = @("c", "color")
+        Action = {
+            Write-Host "PowerShell Console Colors Reference" -ForegroundColor Cyan
+            Write-Host ("=" * 35) -ForegroundColor DarkGray
+            Write-Host ""
+
+            $colors = [enum]::GetValues([System.ConsoleColor])
+            Foreach ($bgcolor in $colors){
+                Foreach ($fgcolor in $colors) { Write-Host "$fgcolor|"  -ForegroundColor $fgcolor -BackgroundColor $bgcolor -NoNewLine }
+                Write-Host " on $bgcolor"
+            }
+        }
+        Summary = "Show available colors for command options and examples."
+        Options = @{}
+        Examples = @(
+            "powertool colors",
+            "pt c"
+        )
+    }
 }
 
 Export-ModuleMember -Function Show-Help, Write-ColoredOptions, Write-ColoredExample, Show-Version, Search-Commands, Test-ModuleCommands, Show-ExtensionInfo, Test-VersionRequirement, Install-Extension, Update-PowerTool, Get-LatestVersion -Variable ModuleCommands

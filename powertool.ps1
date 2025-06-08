@@ -6,6 +6,7 @@ param (
     [int]$MinHeight = 0,
     [int]$MinSize = 0,
     [string]$Pattern,
+    [string]$Module,
     [switch]$Recursive,
     [switch]$Update,
     [switch]$Force

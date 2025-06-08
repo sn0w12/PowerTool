@@ -162,7 +162,8 @@ function Show-Help {
         [hashtable]$AllCommandData, # Receives $commandDefinitions from powertool.ps1
         [hashtable]$CommandModuleMap = @{}, # Receives $commandModuleMap from powertool.ps1
         [hashtable]$ExtensionCommands = @{}, # Receives $extensionCommands from powertool.ps1
-        [hashtable]$Extensions = @{} # Receives $extensions from powertool.ps1
+        [hashtable]$Extensions = @{}, # Receives $extensions from powertool.ps1
+        [string]$Module # New parameter to filter by module
     )
 
     if (-not $AllCommandData) {
@@ -251,6 +252,39 @@ function Show-Help {
                 }
                 $moduleGroups[$moduleName] += $commandName
             }
+        }
+
+        # Filter by module if specified
+        if ($Module) {
+            $moduleFound = $false
+
+            # Check if it's a core module
+            if ($moduleGroups.ContainsKey($Module)) {
+                $moduleFound = $true
+                $moduleGroups = @{ $Module = $moduleGroups[$Module] }
+                $extensionGroups = @{}
+            }
+            # Check if it's an extension
+            elseif ($extensionGroups.ContainsKey($Module)) {
+                $moduleFound = $true
+                $moduleGroups = @{}
+                $extensionGroups = @{ $Module = $extensionGroups[$Module] }
+            }
+
+            if (-not $moduleFound) {
+                Write-Host "Module '$Module' not found." -ForegroundColor Red
+                Write-Host ""
+                Write-Host "Available modules:" -ForegroundColor White
+                $allModules = @($moduleGroups.Keys) + @($extensionGroups.Keys) | Sort-Object | Get-Unique
+                foreach ($availableModule in $allModules) {
+                    Write-Host "  $availableModule" -ForegroundColor Cyan
+                }
+                return
+            }
+
+            Write-Host "Showing commands for module: " -NoNewline -ForegroundColor White
+            Write-Host $Module -ForegroundColor Cyan
+            Write-Host ""
         }
 
         # Define module display order (Help first, then others alphabetically)
@@ -1466,17 +1500,20 @@ $script:ModuleCommands = @{
         Action = {
             # $Value1 is the value of the -Value1 parameter from powertool.ps1, used as ForCommand here
             # Use $script:commandDefinitions to access the main script's command definitions
-            Show-Help -ForCommand $Value1 -AllCommandData $script:commandDefinitions -CommandModuleMap $script:commandModuleMap -ExtensionCommands $script:extensionCommands -Extensions $script:extensions
+            Show-Help -ForCommand $Value1 -AllCommandData $script:commandDefinitions -CommandModuleMap $script:commandModuleMap -ExtensionCommands $script:extensionCommands -Extensions $script:extensions -Module $Module
         }
         Summary = "Show this help message or help for a specific command."
         Options = @{
             0 = @(
                 @{ Token = "command-name"; Type = "OptionalArgument"; Description = "The name of the command to get help for." }
+                @{ Token = "Module"; Type = "OptionalParameter"; Description = "Show only commands from the specified module or extension." }
             )
         }
         Examples = @(
             "powertool help rename-random",
-            "powertool help filter-images"
+            "powertool help filter-images",
+            "powertool help -Module Help",
+            "powertool help -Module ImageProcessing"
         )
     }
     "extension" = @{

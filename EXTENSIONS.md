@@ -52,7 +52,9 @@ The `extension.json` file is required and defines the extension metadata and mod
         "modules/ThirdPartyIntegration.psm1"
     ],
     "dependencies": {
-        "powertool": ">=0.1.0"
+        "powertool": ">=0.1.0",
+        "sn0w12/PowerToolUtilities": ">=1.0.0",
+        "https://gitlab.com/user/custom-extension.git": ">=2.1.0"
     },
     "keywords": ["utility", "automation", "files"]
 }
@@ -60,18 +62,69 @@ The `extension.json` file is required and defines the extension metadata and mod
 
 ### Manifest Properties
 
-| Property       | Required | Type   | Description                                             |
-| -------------- | -------- | ------ | ------------------------------------------------------- |
-| `name`         | Yes      | string | Unique extension identifier (lowercase, hyphens)        |
-| `description`  | Yes      | string | Brief description of extension functionality            |
-| `version`      | No       | string | Semantic version (default: "1.0.0")                     |
-| `author`       | No       | string | Extension author name                                   |
-| `license`      | No       | string | License identifier (e.g., "MIT", "GPL-3.0")             |
-| `homepage`     | No       | string | Extension homepage or repository URL                    |
-| `source`       | No       | string | Git repository URL for cloning the extension source     |
-| `modules`      | Yes      | array  | List of PowerShell module files to load                 |
-| `dependencies` | No       | object | Version requirements for PowerTool and other extensions |
-| `keywords`     | No       | array  | Keywords for extension discovery                        |
+| Property       | Required | Type   | Description                                            |
+| -------------- | -------- | ------ | ------------------------------------------------------ |
+| `name`         | Yes      | string | Unique extension identifier (lowercase, hyphens)       |
+| `description`  | Yes      | string | Brief description of extension functionality           |
+| `version`      | No       | string | Semantic version (default: "1.0.0")                    |
+| `author`       | No       | string | Extension author name                                  |
+| `license`      | No       | string | License identifier (e.g., "MIT", "GPL-3.0")            |
+| `homepage`     | No       | string | Extension homepage or repository URL                   |
+| `source`       | No       | string | Git repository URL for cloning the extension source    |
+| `modules`      | Yes      | array  | List of PowerShell module files to load                |
+| `dependencies` | No       | object | Extension dependencies (see format requirements below) |
+| `keywords`     | No       | array  | Keywords for extension discovery                       |
+
+### Dependency Format Requirements
+
+Dependencies must follow specific format rules:
+
+1. **PowerTool Core**: Use `"powertool"` as the key (special case)
+
+    ```json
+    "powertool": ">=0.1.0"
+    ```
+
+2. **GitHub Extensions**: Use `"username/repository"` format
+
+    ```json
+    "sn0w12/PowerToolExtension": ">=1.0.0",
+    "microsoft/PowerToys-Extension": ">=2.1.0"
+    ```
+
+3. **Other Git Providers**: Use full Git URL
+    ```json
+    "https://gitlab.com/user/extension.git": ">=1.5.0",
+    "https://bitbucket.org/team/powertool-ext.git": ">=0.8.0",
+    "https://git.example.com/dev/pt-extension.git": ">=1.0.0"
+    ```
+
+**Invalid Examples:**
+
+```json
+// ❌ Invalid - local names without provider
+"my-extension": ">=1.0.0",
+"custom-tools": ">=2.0.0",
+
+// ❌ Invalid - incomplete GitHub format
+"PowerToolExtension": ">=1.0.0",
+"sn0w12": ">=1.0.0",
+
+// ❌ Invalid - non-git URLs
+"https://example.com/extension": ">=1.0.0"
+```
+
+**Valid Examples:**
+
+```json
+// ✅ Valid
+"powertool": ">=0.1.0",
+"sn0w12/PowerToolExtension": ">=1.0.0",
+"user123/my-powertool-ext": ">=0.5.0",
+"https://gitlab.com/company/internal-extension.git": ">=2.0.0",
+"https://git.company.com/~user/powertool-addon": ">=1.2.0",
+"https://any-git-provider.com/path/to/repo.git": ">=1.0.0"
+```
 
 ## Creating Extension Modules
 
@@ -525,6 +578,10 @@ extensions/
     "version": "1.2.0",
     "author": "PowerTool Developer",
     "modules": ["modules/FileOperations.psm1", "modules/FileUtilities.psm1"],
+    "dependencies": {
+        "powertool": ">=0.1.0",
+        "sn0w12/PowerToolUtilities": ">=1.0.0"
+    },
     "keywords": ["files", "management", "utility"]
 }
 ```

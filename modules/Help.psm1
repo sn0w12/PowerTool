@@ -1578,7 +1578,7 @@ $script:ModuleCommands = @{
         )
     }
     "latest" = @{
-        Aliases = @("check", "newest")
+        Aliases = @("checkout", "newest")
         Action = {
             Get-LatestVersion -CurrentVersion $version
         }

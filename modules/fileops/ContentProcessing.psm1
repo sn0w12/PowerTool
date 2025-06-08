@@ -73,70 +73,6 @@ function Remove-SmallImages($dir, $minWidth, $minHeight) {
     Write-Host "Removed $removedCount image(s) smaller than ${minWidth}x${minHeight} from '$dir'" -ForegroundColor Green
 }
 
-function Remove-TextFromFiles($dir, $pattern) {
-    # Resolve the full path
-    $resolvedPath = Resolve-Path $dir -ErrorAction SilentlyContinue
-    if (-not $resolvedPath) {
-        Write-Error "Directory not found: $dir"
-        return
-    }
-
-    $dir = $resolvedPath.Path
-
-    if (-not $pattern) {
-        Write-Error "Pattern parameter is required"
-        return
-    }
-
-    # Get all txt files recursively
-    $txtFiles = Get-ChildItem -Path $dir -Filter "*.txt" -File -Recurse
-
-    # Check core settings
-    $confirmDestructive = Get-Setting -Key "core.confirm-destructive"
-    $verboseMode = Get-Setting -Key "core.verbose"
-
-    if ($confirmDestructive -and $txtFiles.Count -gt 0) {
-        $response = Read-Host "Are you sure you want to modify $($txtFiles.Count) text file(s) in '$dir' using pattern '$pattern'? (y/N)"
-        if ($response -notmatch '^[Yy]([Ee][Ss])?$') {
-            Write-Host "Operation cancelled." -ForegroundColor Yellow
-            return
-        }
-    }
-
-    $processedCount = 0
-    $modifiedCount = 0
-
-    foreach ($txtFile in $txtFiles) {
-        try {
-            $content = Get-Content -Path $txtFile.FullName -Raw -Encoding UTF8
-            $originalContent = $content
-
-            # Remove text matching the regex pattern
-            $content = $content -replace $pattern, ""
-
-            # Only write back if content changed
-            if ($content -ne $originalContent) {
-                Set-Content -Path $txtFile.FullName -Value $content -Encoding UTF8 -NoNewline
-                $modifiedCount++
-                if ($verboseMode) {
-                    Write-Host "Modified: $($txtFile.Name)" -ForegroundColor DarkGray
-                } else {
-                    Write-Host "Modified: $($txtFile.Name)" -ForegroundColor Yellow
-                }
-            } elseif ($verboseMode) {
-                Write-Host "No changes: $($txtFile.Name)" -ForegroundColor DarkGray
-            }
-
-            $processedCount++
-        }
-        catch {
-            Write-Warning "Could not process file: $($txtFile.Name) - $($_.Exception.Message)"
-        }
-    }
-
-    Write-Host "Processed $processedCount txt file(s), modified $modifiedCount file(s) in '$dir'" -ForegroundColor Green
-}
-
 $script:ModuleCommands = @{
     "filter-images" = @{
         Aliases = @("fi")
@@ -171,25 +107,6 @@ $script:ModuleCommands = @{
             "powertool fi -MinSize 800"
         )
     }
-    "remove-text" = @{
-        Aliases = @("rt")
-        Action = {
-            $targetPath = Get-TargetPath $Value1
-            Remove-TextFromFiles -dir $targetPath -pattern $Pattern
-        }
-        Summary = "Remove text from all txt files using regex pattern."
-        Options = @{
-            0 = @(
-                @{ Token = "path"; Type = "OptionalArgument"; Description = "Target directory. Defaults to current location." }
-                @{ Token = "Pattern"; Type = "Parameter"; Description = "The regular expression pattern to match text for removal." }
-                @{ Token = "regex"; Type = "Type"; Description = "A valid regex string." }
-            )
-        }
-        Examples = @(
-            "powertool remove-text -Pattern `"Advertisement.*?End`"",
-            "powertool rt `"C:\MyFolder`" -Pattern `"\d{4}-\d{2}-\d{2}\`""
-        )
-    }
 }
 
-Export-ModuleMember -Function Remove-SmallImages, Remove-TextFromFiles -Variable ModuleCommands
+Export-ModuleMember -Function Remove-SmallImages -Variable ModuleCommands

@@ -1408,6 +1408,152 @@ function Convert-SizeToBytes($sizeString) {
     return $null
 }
 
+function Show-ImageAsAscii($imagePath, $width = 80) {
+    try {
+        Add-Type -AssemblyName System.Drawing
+        $image = [System.Drawing.Image]::FromFile($imagePath)
+
+        $height = [int](($image.Height * $width) / ($image.Width * 2))
+        $resized = New-Object System.Drawing.Bitmap($width, $height)
+
+        $graphics = [System.Drawing.Graphics]::FromImage($resized)
+        $graphics.DrawImage($image, 0, 0, $width, $height)
+
+        $chars = " .:-=+*#%@"
+        for ($y = 0; $y -lt $height; $y++) {
+            $line = ""
+            for ($x = 0; $x -lt $width; $x++) {
+                $pixel = $resized.GetPixel($x, $y)
+                $brightness = [int]($pixel.R * 0.3 + $pixel.G * 0.59 + $pixel.B * 0.11)
+                $charIndex = [Math]::Min([int]($brightness / 255 * ($chars.Length - 1)), $chars.Length - 1)
+                $line += $chars[$charIndex]
+            }
+            Write-Host $line
+        }
+
+        $graphics.Dispose()
+        $resized.Dispose()
+        $image.Dispose()
+    }
+    catch {
+        Write-Error "Failed to display image: $($_.Exception.Message)"
+    }
+}
+
+function Show-ImageAsColorAscii($imagePath, $width = 40) {
+    if ($PSVersionTable.PSVersion.Major -lt 7) {
+        Show-ImageAsAscii $imagePath $width
+        return
+    }
+
+    try {
+        Add-Type -AssemblyName System.Drawing
+        $image = [System.Drawing.Image]::FromFile($imagePath)
+
+        $height = [int](($image.Height * $width) / ($image.Width * 2))
+        $resized = New-Object System.Drawing.Bitmap($width, $height)
+
+        $graphics = [System.Drawing.Graphics]::FromImage($resized)
+        $graphics.DrawImage($image, 0, 0, $width, $height)
+
+        # Use different characters for different brightness levels
+        $chars = " ░▒▓█"
+
+        for ($y = 0; $y -lt $height; $y++) {
+            $lineSegments = @()
+            $currentColor = $null
+            $currentSegment = ""
+
+            for ($x = 0; $x -lt $width; $x++) {
+                $pixel = $resized.GetPixel($x, $y)
+                $r = $pixel.R
+                $g = $pixel.G
+                $b = $pixel.B
+
+                # Calculate brightness for character selection
+                $brightness = [int]($r * 0.299 + $g * 0.587 + $b * 0.114)
+                $charIndex = [Math]::Min([int]($brightness / 255 * ($chars.Length - 1)), $chars.Length - 1)
+                $char = $chars[$charIndex]
+
+                # Convert RGB to nearest console color for foreground
+                $nearestColor = if ($brightness -lt 20) { $null } else { Get-NearestConsoleColor -r $r -g $g -b $b }
+                $actualChar = if ($brightness -lt 20) { " " } else { $char }
+
+                # Group consecutive characters with the same color
+                if ($nearestColor -eq $currentColor) {
+                    $currentSegment += $actualChar
+                } else {
+                    # Output the previous segment if it exists
+                    if ($currentSegment) {
+                        $lineSegments += @{ Text = $currentSegment; Color = $currentColor }
+                    }
+                    # Start new segment
+                    $currentSegment = $actualChar
+                    $currentColor = $nearestColor
+                }
+            }
+
+            # Add the final segment
+            if ($currentSegment) {
+                $lineSegments += @{ Text = $currentSegment; Color = $currentColor }
+            }
+
+            # Output all segments for this line
+            foreach ($segment in $lineSegments) {
+                if ($segment.Color) {
+                    Write-Host $segment.Text -NoNewline -ForegroundColor $segment.Color
+                } else {
+                    Write-Host $segment.Text -NoNewline
+                }
+            }
+            Write-Host ""
+        }
+
+        $graphics.Dispose()
+        $resized.Dispose()
+        $image.Dispose()
+    } catch {
+        Write-Error "Failed to display image as color ASCII: $($_.Exception.Message)"
+        Show-ImageAsAscii $imagePath $width
+    }
+}
+
+function Get-NearestConsoleColor($r, $g, $b) {
+    $consoleColors = @{
+        [ConsoleColor]::Black = @(0, 0, 0)
+        [ConsoleColor]::DarkBlue = @(0, 0, 128)
+        [ConsoleColor]::DarkGreen = @(0, 128, 0)
+        [ConsoleColor]::DarkCyan = @(0, 128, 128)
+        [ConsoleColor]::DarkRed = @(128, 0, 0)
+        [ConsoleColor]::DarkMagenta = @(128, 0, 128)
+        [ConsoleColor]::DarkYellow = @(128, 128, 0)
+        [ConsoleColor]::Gray = @(192, 192, 192)
+        [ConsoleColor]::DarkGray = @(128, 128, 128)
+        [ConsoleColor]::Blue = @(0, 0, 255)
+        [ConsoleColor]::Green = @(0, 255, 0)
+        [ConsoleColor]::Cyan = @(0, 255, 255)
+        [ConsoleColor]::Red = @(255, 0, 0)
+        [ConsoleColor]::Magenta = @(255, 0, 255)
+        [ConsoleColor]::Yellow = @(255, 255, 0)
+        [ConsoleColor]::White = @(255, 255, 255)
+    }
+
+    $minDistance = [double]::MaxValue
+    $nearestColor = [ConsoleColor]::Black
+
+    foreach ($color in $consoleColors.Keys) {
+        $colorRgb = $consoleColors[$color]
+        $distance = [Math]::Sqrt([Math]::Pow($r - $colorRgb[0], 2) + [Math]::Pow($g - $colorRgb[1], 2) + [Math]::Pow($b - $colorRgb[2], 2))
+
+        if ($distance -lt $minDistance) {
+            $minDistance = $distance
+            $nearestColor = $color
+        }
+    }
+
+    return $nearestColor
+}
+
 $script:ModuleCommands = @{
     "rename-random" = @{
         Aliases = @("rr")
@@ -1593,6 +1739,36 @@ $script:ModuleCommands = @{
             "powertool search-files -Name `"report*.docx`" -Content `"Quarterly report`" -MinSize 1MB -MaxSize 10MB -ModifiedAfter `"2024-01-01`" -ModifiedBefore `"2024-12-31`""
         )
     }
+    "image" = @{
+        Aliases = @("img", "ascii")
+        Action = {
+            $targetPath = Get-TargetPath $Value1
+            $width = if ($Value2 -and $Value2 -match '^\d+$') {
+                [int]$Value2
+            } else {
+                try {
+                    $terminalWidth = $Host.UI.RawUI.WindowSize.Width
+                    $calculatedWidth = [Math]::Max(20, [int]($terminalWidth))
+                    [Math]::Min($calculatedWidth, 2000)
+                } catch {
+                    Write-Error "Failed to determine terminal width: $($_.Exception.Message)"
+                    80
+                }
+            }
+            Show-ImageAsColorAscii -imagePath $targetPath -width $width
+        }
+        Summary = "Display an image as ASCII art."
+        Options = @{
+            0 = @(
+                @{ Token = "path"; Type = "OptionalArgument"; Description = "Image file path. Defaults to current location if omitted." }
+                @{ Token = "width"; Type = "OptionalArgument"; Description = "Width of the ASCII art. Defaults to 80 characters." }
+            )
+        }
+        Examples = @(
+            "powertool image myimage.png",
+            "powertool img `"C:\Images\photo.jpg`" 100"
+        )
+    }
 }
 
-Export-ModuleMember -Function Rename-FilesRandomly, Merge-Directory, Show-DirectoryTree, Show-FileMetadata, Read-PngMetadata, Read-WindowsRuntimeMetadata, Remove-TextFromFiles, Get-PowerToolFileHash, Search-Files, Convert-SizeToBytes -Variable ModuleCommands
+Export-ModuleMember -Function Rename-FilesRandomly, Merge-Directory, Show-DirectoryTree, Show-FileMetadata, Read-PngMetadata, Read-WindowsRuntimeMetadata, Remove-TextFromFiles, Get-PowerToolFileHash, Search-Files, Convert-SizeToBytes, Show-ImageAsAscii, Show-ImageAsColorAscii -Variable ModuleCommands

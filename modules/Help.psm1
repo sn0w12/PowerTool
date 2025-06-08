@@ -777,11 +777,135 @@ function Test-VersionRequirement {
     }
 }
 
-function Show-ExtensionInfo {
+function Update-Extension {
     param(
         [string]$ExtensionName,
         [hashtable]$Extensions = @{}
     )
+
+    if (-not $ExtensionName) {
+        Write-Host "Please specify an extension name to update." -ForegroundColor Red
+        Write-Host "Usage: powertool extension [extension-name] -Update" -ForegroundColor White
+        return
+    }
+
+    if (-not $Extensions.ContainsKey($ExtensionName)) {
+        Write-Host "Extension '$ExtensionName' not found." -ForegroundColor Red
+        Write-Host "Use 'powertool extension' to see all loaded extensions." -ForegroundColor White
+        return
+    }
+
+    $extension = $Extensions[$ExtensionName]
+    $extensionPath = $extension.Path
+
+    # Check if the extension directory is a git repository
+    $gitPath = Join-Path $extensionPath ".git"
+    if (-not (Test-Path $gitPath)) {
+        Write-Host "Extension '$ExtensionName' is not a git repository. Cannot update." -ForegroundColor Red
+        return
+    }
+
+    Write-Host "Updating extension: " -NoNewline -ForegroundColor White
+    Write-Host $ExtensionName -ForegroundColor Cyan
+
+    # Get current version before update
+    $currentVersion = $extension.Version
+    Write-Host "Current version: " -NoNewline -ForegroundColor White
+    Write-Host "v$currentVersion" -ForegroundColor Yellow
+
+    # Perform git pull
+    try {
+        $originalLocation = Get-Location
+        Set-Location $extensionPath
+
+        Write-Host "Checking for updates..." -ForegroundColor DarkGray
+
+        # Check if there are any changes to pull
+        $gitStatus = & git status --porcelain 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Failed to check git status. Make sure git is installed and accessible." -ForegroundColor Red
+            return
+        }
+
+        if ($gitStatus) {
+            Write-Host "Warning: Extension has local changes. Continuing with update..." -ForegroundColor Yellow
+        }
+
+        # Fetch latest changes
+        $fetchResult = & git fetch 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Failed to fetch from remote repository." -ForegroundColor Red
+            Write-Host $fetchResult -ForegroundColor Red
+            return
+        }
+
+        # Check if there are updates available
+        $behindCommits = & git rev-list --count HEAD..@{u} 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Could not determine update status. Attempting pull anyway..." -ForegroundColor Yellow
+            $behindCommits = "unknown"
+        }
+
+        if ($behindCommits -eq "0") {
+            Write-Host "Already up to date." -ForegroundColor Green
+            return
+        }
+
+        if ($behindCommits -ne "unknown") {
+            Write-Host "Found $behindCommits new commit(s). Pulling changes..." -ForegroundColor Green
+        }
+
+        # Perform git pull
+        $pullResult = & git pull 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Failed to pull updates:" -ForegroundColor Red
+            Write-Host $pullResult -ForegroundColor Red
+            return
+        }
+
+        Write-Host "Successfully pulled updates." -ForegroundColor Green
+
+        # Re-read the manifest to get the new version
+        $manifestPath = Join-Path $extensionPath "extension.json"
+        if (Test-Path $manifestPath) {
+            try {
+                $newManifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+                $newVersion = if ($newManifest.version) { $newManifest.version } else { "1.0.0" }
+
+                Write-Host "Updated version: " -NoNewline -ForegroundColor White
+                Write-Host "v$newVersion" -ForegroundColor Yellow
+
+                if ($newVersion -ne $currentVersion) {
+                    Write-Host "Extension updated from v$currentVersion to v$newVersion" -ForegroundColor Green
+                    Write-Host "Note: Restart PowerTool to load the updated extension." -ForegroundColor Yellow
+                } else {
+                    Write-Host "Version unchanged (v$currentVersion)" -ForegroundColor DarkGray
+                }
+            } catch {
+                Write-Host "Updated successfully, but could not read new version from manifest." -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host "Updated successfully, but extension.json not found." -ForegroundColor Yellow
+        }
+
+    } catch {
+        Write-Host "An error occurred during update: $($_.Exception.Message)" -ForegroundColor Red
+    } finally {
+        Set-Location $originalLocation
+    }
+}
+
+function Show-ExtensionInfo {
+    param(
+        [string]$ExtensionName,
+        [hashtable]$Extensions = @{},
+        [switch]$Update
+    )
+
+    if ($Update) {
+        Update-Extension -ExtensionName $ExtensionName -Extensions $Extensions
+        return
+    }
 
     if ($ExtensionName) {
         # Show details for specific extension
@@ -895,18 +1019,20 @@ $script:ModuleCommands = @{
     "extension" = @{
         Aliases = @("ext", "extensions")
         Action = {
-            Show-ExtensionInfo -ExtensionName $Value1 -Extensions $script:extensions
+            Show-ExtensionInfo -ExtensionName $Value1 -Extensions $script:extensions -Update:$Update
         }
         Summary = "Show information about loaded extensions or details for a specific extension."
         Options = @{
             0 = @(
                 @{ Token = "extension-name"; Type = "OptionalArgument"; Description = "The name of the extension to get details for." }
+                @{ Token = "Update"; Type = "OptionalParameter"; Description = "Update the specified extension using git pull." }
             )
         }
         Examples = @(
             "powertool extension",
             "powertool extension example-extension",
-            "powertool ext file-manager"
+            "powertool ext file-manager -Update",
+            "pt ext my-extension -Update"
         )
     }
     "search" = @{

@@ -1542,7 +1542,7 @@ $script:ModuleCommands = @{
         )
     }
     "search-files" = @{
-        Aliases = @("find", "locate", "sf")
+        Aliases = @("locate", "sf")
         Action = {
             $targetPath = Get-TargetPath $Value1
             $useRecursive = -not ($PSBoundParameters.ContainsKey('NoRecursive') -and $NoRecursive)

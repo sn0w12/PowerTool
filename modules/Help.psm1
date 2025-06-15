@@ -1320,7 +1320,8 @@ function Install-Extension {
 function Update-PowerTool {
     param(
         [string]$PowerToolVersion,
-        [string]$ToVersion
+        [string]$ToVersion,
+        [switch]$Nightly
     )
 
     # Check if git is available
@@ -1352,6 +1353,12 @@ function Update-PowerTool {
     if ($ToVersion) {
         Write-Host "Target version: " -NoNewline -ForegroundColor White
         Write-Host $ToVersion -ForegroundColor Yellow
+    } elseif ($Nightly) {
+        Write-Host "Target: " -NoNewline -ForegroundColor White
+        Write-Host "Latest nightly (HEAD)" -ForegroundColor Magenta
+    } else {
+        Write-Host "Target: " -NoNewline -ForegroundColor White
+        Write-Host "Latest tagged version" -ForegroundColor Green
     }
 
     try {
@@ -1372,7 +1379,7 @@ function Update-PowerTool {
         }
 
         # Fetch latest changes
-        $fetchResult = & git fetch 2>&1
+        $fetchResult = & git fetch --tags 2>&1
         if ($LASTEXITCODE -ne 0) {
             Write-Host "Failed to fetch from remote repository." -ForegroundColor Red
             Write-Host $fetchResult -ForegroundColor Red
@@ -1405,35 +1412,95 @@ function Update-PowerTool {
             } else {
                 Write-Host "Successfully checked out version '$ToVersion'." -ForegroundColor Green
             }
-        } else {
-            # Update to latest (git pull)
-            # Check if there are updates available
-            $behindCommits = & git rev-list --count HEAD..@{u} 2>$null
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host "Could not determine update status. Attempting pull anyway..." -ForegroundColor Yellow
-                $behindCommits = "unknown"
+        } elseif ($Nightly) {
+            # Update to latest commit on default branch (nightly)
+            Write-Host "Updating to latest nightly version..." -ForegroundColor Magenta
+
+            # Get the default branch name
+            $defaultBranch = & git symbolic-ref refs/remotes/origin/HEAD 2>$null
+            if ($LASTEXITCODE -eq 0) {
+                $defaultBranch = $defaultBranch -replace '^refs/remotes/origin/', ''
+            } else {
+                # Fallback to common default branch names
+                $defaultBranch = "main"
+                $branchExists = & git show-ref --verify --quiet "refs/remotes/origin/main" 2>$null
+                if ($LASTEXITCODE -ne 0) {
+                    $branchExists = & git show-ref --verify --quiet "refs/remotes/origin/master" 2>$null
+                    if ($LASTEXITCODE -eq 0) {
+                        $defaultBranch = "master"
+                    }
+                }
             }
 
-            if ($behindCommits -eq "0") {
-                Write-Host "PowerTool is already up to date." -ForegroundColor Green
+            Write-Host "Switching to branch: $defaultBranch" -ForegroundColor DarkGray
+            $checkoutResult = & git checkout $defaultBranch 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "Failed to checkout branch '$defaultBranch':" -ForegroundColor Red
+                Write-Host $checkoutResult -ForegroundColor Red
                 return
             }
 
-            if ($behindCommits -ne "unknown") {
-                Write-Host "Found $behindCommits new commit(s). Pulling changes..." -ForegroundColor Green
-            }
-
-            # Perform git pull
-            $pullResult = & git pull 2>&1
+            # Pull latest changes
+            $pullResult = & git pull origin $defaultBranch 2>&1
             if ($LASTEXITCODE -ne 0) {
-                Write-Host "Failed to pull updates:" -ForegroundColor Red
+                Write-Host "Failed to pull latest changes:" -ForegroundColor Red
                 Write-Host $pullResult -ForegroundColor Red
                 return
             }
+
+            Write-Host "Successfully updated to latest nightly version." -ForegroundColor Green
+        } else {
+            # Update to latest tagged version (default behavior)
+            Write-Host "Finding latest tagged version..." -ForegroundColor DarkGray
+
+            # Get the latest tag
+            $latestTag = & git describe --tags --abbrev=0 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "No tags found in the repository. Use -Nightly to update to the latest commit." -ForegroundColor Yellow
+                return
+            }
+
+            Write-Host "Latest tagged version: " -NoNewline -ForegroundColor White
+            Write-Host $latestTag -ForegroundColor Green
+
+            # Check if we're already on the latest tag
+            $currentTag = & git describe --tags --exact-match HEAD 2>$null
+            if ($LASTEXITCODE -eq 0 -and $currentTag -eq $latestTag) {
+                Write-Host "Already on the latest tagged version ($latestTag)." -ForegroundColor Green
+                return
+            }
+
+            # Compare current version with latest tag
+            $currentVersionClean = $PowerToolVersion -replace '^v', ''
+            $latestVersionClean = $latestTag -replace '^v', ''
+
+            try {
+                $current = [System.Version]::Parse($currentVersionClean)
+                $latest = [System.Version]::Parse($latestVersionClean)
+
+                if ($current -ge $latest) {
+                    Write-Host "Current version (v$currentVersionClean) is already up to date or newer than the latest tag ($latestTag)." -ForegroundColor Green
+                    return
+                }
+            } catch {
+                # If version parsing fails, proceed with the update
+                Write-Host "Could not parse versions for comparison. Proceeding with update..." -ForegroundColor DarkGray
+            }
+
+            # Checkout the latest tag
+            Write-Host "Updating to tagged version: $latestTag" -ForegroundColor Green
+            $checkoutResult = & git checkout $latestTag 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "Failed to checkout tag '$latestTag':" -ForegroundColor Red
+                Write-Host $checkoutResult -ForegroundColor Red
+                return
+            }
+
+            Write-Host "Successfully updated to version $latestTag." -ForegroundColor Green
         }
 
         Write-Host "PowerTool updated successfully!" -ForegroundColor Green
-        Write-Host "Note: The update will take effect the next time you start PowerTool." -ForegroundColor Yellow
+        Write-Host "Note: You may need to restart your PowerShell session for changes to take effect." -ForegroundColor Yellow
 
     } catch {
         Write-Host "An error occurred during update: $($_.Exception.Message)" -ForegroundColor Red
@@ -1630,19 +1697,21 @@ $script:ModuleCommands = @{
     "update" = @{
         Aliases = @("upgrade", "up")
         Action = {
-            Update-PowerTool -PowerToolVersion $version -ToVersion $Value1
+            Update-PowerTool -PowerToolVersion $version -ToVersion $Value1 -Nightly:$Nightly
         }
-        Summary = "Update PowerTool to the latest version or a specific version using git."
+        Summary = "Update PowerTool to the latest tagged version, a specific version, or latest nightly using git."
         Options = @{
             0 = @(
-                @{ Token = "version"; Type = "OptionalArgument"; Description = "Specific version, tag, or branch to update to. If not specified, updates to latest." }
+                @{ Token = "version"; Type = "OptionalArgument"; Description = "Specific version, tag, or branch to update to. If not specified, updates to latest tagged version." }
+                @{ Token = "Nightly"; Type = "OptionalParameter"; Description = "Update to the latest commit on the default branch instead of latest tag." }
             )
         }
         Examples = @(
             "powertool update",
             "powertool update v1.2.0",
+            "powertool update -Nightly",
             "powertool update main",
-            "pt up v0.5.0"
+            "pt up -Nightly"
         )
     }
     "latest" = @{

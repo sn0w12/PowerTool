@@ -17,7 +17,8 @@ param (
     [switch]$NoRecursive,
     [switch]$CaseSensitive,
     [switch]$Update,
-    [switch]$Force
+    [switch]$Force,
+    [switch]$Nightly
 )
 
 $script:version = "0.1.0"

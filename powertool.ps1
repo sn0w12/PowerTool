@@ -87,6 +87,14 @@ foreach ($modulePathString in $modules) {
 }
 
 $extensionsPath = Join-Path $PSScriptRoot "extensions"
+if (-not (Test-Path $extensionsPath)) {
+    try {
+        New-Item -Path $extensionsPath -ItemType Directory -Force | Out-Null
+    } catch {
+        Write-Warning "Failed to create extensions directory '$extensionsPath': $($_.Exception.Message)"
+    }
+}
+
 if (Test-Path $extensionsPath) {
     $extensionDirs = Get-ChildItem -Path $extensionsPath -Directory
 

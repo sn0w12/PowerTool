@@ -338,4 +338,120 @@ function Invoke-WithLoader {
     }
 }
 
-Export-ModuleMember -Function Get-LevenshteinDistance, Get-TargetPath, Start-Loader, Stop-Loader, Invoke-WithLoader
+function Write-Separator {
+    <#
+        .SYNOPSIS
+            Write a horizontal line that spans the width of the current terminal.
+        .DESCRIPTION
+            Creates a horizontal line using a specified character that fills the entire width
+            of the current terminal/console window. Useful for creating visual separators.
+        .EXAMPLE
+            Write-Separator
+            # Outputs: ────────────────────────────────────────────────────────────────────────────────
+        .EXAMPLE
+            Write-Separator -Character "=" -ForegroundColor "Green"
+            # Outputs a green line of equal signs
+        .EXAMPLE
+            Write-Separator -Character "*" -ForegroundColor "White" -BackgroundColor "Red"
+            # Outputs white asterisks on red background
+        .EXAMPLE
+            Write-Separator -Character " " -BackgroundColor "Blue" -Width 50
+            # Outputs a blue background bar 50 characters wide
+    #>
+    [CmdletBinding()]
+    param(
+        # Character to use for the horizontal line
+        [Parameter()]
+        [string]$Character = [char]0x2500,
+
+        # Foreground color of the line
+        [Parameter()]
+        [ValidateSet("White", "Gray", "DarkGray", "Red", "DarkRed", "Green", "DarkGreen", "Yellow", "DarkYellow", "Blue", "DarkBlue", "Magenta", "DarkMagenta", "Cyan", "DarkCyan", "Black")]
+        [string]$ForegroundColor,
+
+        # Background color of the line
+        [Parameter()]
+        [ValidateSet("White", "Gray", "DarkGray", "Red", "DarkRed", "Green", "DarkGreen", "Yellow", "DarkYellow", "Blue", "DarkBlue", "Magenta", "DarkMagenta", "Cyan", "DarkCyan", "Black")]
+        [string]$BackgroundColor,
+
+        # Legacy parameter for backward compatibility
+        [Parameter()]
+        [ValidateSet("White", "Gray", "DarkGray", "Red", "DarkRed", "Green", "DarkGreen", "Yellow", "DarkYellow", "Blue", "DarkBlue", "Magenta", "DarkMagenta", "Cyan", "DarkCyan", "Black")]
+        [string]$Color,
+
+        # Don't add a newline after the line
+        [Parameter()]
+        [switch]$NoNewLine,
+
+        # Custom width instead of using terminal width
+        [Parameter()]
+        [int]$Width
+    )
+
+    try {
+        # Handle legacy Color parameter for backward compatibility
+        if ($Color -and -not $ForegroundColor) {
+            $ForegroundColor = $Color
+        }
+
+        # Determine the width to use
+        if ($Width -gt 0) {
+            $lineWidth = $Width
+        }
+        elseif ($Host.UI.RawUI -and $Host.UI.RawUI.BufferSize) {
+            $lineWidth = $Host.UI.RawUI.BufferSize.Width
+        }
+        elseif ($Host.UI.RawUI -and $Host.UI.RawUI.WindowSize) {
+            $lineWidth = $Host.UI.RawUI.WindowSize.Width
+        }
+        else {
+            # Fallback width if we can't determine terminal size
+            $lineWidth = 80
+        }
+
+        # Ensure we have a valid character
+        if ([string]::IsNullOrEmpty($Character)) {
+            $Character = [char]0x2500
+        }
+
+        # Create the line
+        $line = $Character * $lineWidth
+
+        # Output the line with optional colors
+        $writeParams = @{
+            Object = $line
+            NoNewline = $NoNewLine.IsPresent
+        }
+
+        if ($ForegroundColor) {
+            $writeParams.ForegroundColor = $ForegroundColor
+        }
+
+        if ($BackgroundColor) {
+            $writeParams.BackgroundColor = $BackgroundColor
+        }
+
+        Write-Host @writeParams
+    }
+    catch {
+        Write-Warning "Could not determine terminal width. Using default width of 80."
+        $line = $Character * 80
+
+        $writeParams = @{
+            Object = $line
+            NoNewline = $NoNewLine.IsPresent
+        }
+
+        if ($ForegroundColor) {
+            $writeParams.ForegroundColor = $ForegroundColor
+        }
+
+        if ($BackgroundColor) {
+            $writeParams.BackgroundColor = $BackgroundColor
+        }
+
+        Write-Host @writeParams
+    }
+}
+
+Export-ModuleMember -Function Get-LevenshteinDistance, Get-TargetPath, Start-Loader, Stop-Loader, Invoke-WithLoader, Write-Separator

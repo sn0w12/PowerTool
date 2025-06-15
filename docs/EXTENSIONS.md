@@ -182,6 +182,7 @@ function Get-MyData {
 # Define commands that PowerTool will recognize
 $script:ModuleCommands = @{
     "my-command" = @{
+        Position = 0
         Aliases = @("mc", "mycmd")
         Action = {
             $inputPath = if ($Value1) { $Value1 } else { "" }

@@ -262,12 +262,14 @@ function Show-Help {
             if ($moduleGroups.ContainsKey($Module)) {
                 $moduleFound = $true
                 $moduleGroups = @{ $Module = $moduleGroups[$Module] }
-                $extensionGroups = @{}
+                $extensionGroups = @{
+                }
             }
             # Check if it's an extension
             elseif ($extensionGroups.ContainsKey($Module)) {
                 $moduleFound = $true
-                $moduleGroups = @{}
+                $moduleGroups = @{
+                }
                 $extensionGroups = @{ $Module = $extensionGroups[$Module] }
             }
 
@@ -305,8 +307,21 @@ function Show-Help {
             # Display module header
             Write-Host "  ${moduleName}:" -ForegroundColor Magenta
 
-            # Sort commands within each module
-            $sortedCommands = $moduleGroups[$moduleName] | Sort-Object
+            # Sort commands within each module by Position first, then alphabetically
+            $commandsInModule = $moduleGroups[$moduleName]
+            $sortedCommands = $commandsInModule | Sort-Object {
+                $cmd = $AllCommandData[$_]
+                # Primary sort key: Position (if exists), otherwise use a high number to sort last
+                $position = if ($cmd.ContainsKey('Position') -and $null -ne $cmd.Position) {
+                    [int]$cmd.Position
+                } else {
+                    999999
+                }
+                return $position
+            }, {
+                # Secondary sort key: Command name (alphabetical)
+                $_
+            }
 
             foreach ($commandNameKey in $sortedCommands) {
                 $command = $AllCommandData[$commandNameKey]
@@ -344,8 +359,21 @@ function Show-Help {
             Write-Host "  ${extensionName} " -NoNewline -ForegroundColor DarkMagenta
             Write-Host "(${extensionVersion}):" -ForegroundColor DarkGray
 
-            # Sort commands within each extension
-            $sortedCommands = $extensionGroups[$extensionName] | Sort-Object
+            # Sort commands within each extension by Position first, then alphabetically
+            $commandsInExtension = $extensionGroups[$extensionName]
+            $sortedCommands = $commandsInExtension | Sort-Object {
+                $cmd = $AllCommandData[$_]
+                # Primary sort key: Position (if exists), otherwise use a high number to sort last
+                $position = if ($cmd.ContainsKey('Position') -and $null -ne $cmd.Position) {
+                    [int]$cmd.Position
+                } else {
+                    999999
+                }
+                return $position
+            }, {
+                # Secondary sort key: Command name (alphabetical)
+                $_
+            }
 
             foreach ($commandNameKey in $sortedCommands) {
                 $command = $AllCommandData[$commandNameKey]
@@ -1496,6 +1524,7 @@ function Get-LatestVersion {
 
 $script:ModuleCommands = @{
     "help" = @{
+        Position = 0
         Aliases = @("h")
         Action = {
             # $Value1 is the value of the -Value1 parameter from powertool.ps1, used as ForCommand here
@@ -1516,6 +1545,35 @@ $script:ModuleCommands = @{
             "powertool help -Module ImageProcessing"
         )
     }
+    "version" = @{
+        Position = 1
+        Aliases = @("v", "ver")
+        Action = { Show-Version -version $version }
+        Summary = "Show the current version of PowerTool."
+        Options = @{}
+        Examples = @(
+            "powertool version",
+            "powertool v"
+        )
+    }
+    "search" = @{
+        Position = 2
+        Aliases = @("find", "s")
+        Action = {
+            Search-Commands -SearchTerm $Value1 -AllCommandData $script:commandDefinitions -CommandModuleMap $script:commandModuleMap
+        }
+        Summary = "Search through all available commands by name, aliases, or description."
+        Options = @{
+            0 = @(
+                @{ Token = "search-term"; Type = "Argument"; Description = "The term to search for in commands, aliases, summaries, or options." }
+            )
+        }
+        Examples = @(
+            "powertool search image",
+            "powertool find rename",
+            "pt f file"
+        )
+    }
     "extension" = @{
         Aliases = @("ext", "extensions")
         Action = {
@@ -1533,33 +1591,6 @@ $script:ModuleCommands = @{
             "powertool extension example-extension",
             "powertool ext file-manager -Update",
             "pt ext my-extension -Update"
-        )
-    }
-    "search" = @{
-        Aliases = @("find", "s")
-        Action = {
-            Search-Commands -SearchTerm $Value1 -AllCommandData $script:commandDefinitions -CommandModuleMap $script:commandModuleMap
-        }
-        Summary = "Search through all available commands by name, aliases, or description."
-        Options = @{
-            0 = @(
-                @{ Token = "search-term"; Type = "Argument"; Description = "The term to search for in commands, aliases, summaries, or options." }
-            )
-        }
-        Examples = @(
-            "powertool search image",
-            "powertool find rename",
-            "pt f file"
-        )
-    }
-    "version" = @{
-        Aliases = @("v", "ver")
-        Action = { Show-Version -version $version }
-        Summary = "Show the current version of PowerTool."
-        Options = @{}
-        Examples = @(
-            "powertool version",
-            "powertool v"
         )
     }
     "validate" = @{
@@ -1620,8 +1651,7 @@ $script:ModuleCommands = @{
             Get-LatestVersion -CurrentVersion $version
         }
         Summary = "Check the latest available version of PowerTool on GitHub."
-        Options = @{
-        }
+        Options = @{}
         Examples = @(
             "powertool latest",
             "pt check"
@@ -1641,7 +1671,8 @@ $script:ModuleCommands = @{
             }
         }
         Summary = "Show available colors for command options and examples."
-        Options = @{}
+        Options = @{
+        }
         Examples = @(
             "powertool colors",
             "pt c"

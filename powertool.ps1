@@ -5,6 +5,7 @@ param (
     [int]$MinWidth = 0,
     [int]$MinHeight = 0,
     [int]$MinSize = 0,
+    [int]$Page = 1,
     [string]$Pattern,
     [string]$Module,
     [string]$Name,

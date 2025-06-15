@@ -163,7 +163,8 @@ function Show-Help {
         [hashtable]$CommandModuleMap = @{}, # Receives $commandModuleMap from powertool.ps1
         [hashtable]$ExtensionCommands = @{}, # Receives $extensionCommands from powertool.ps1
         [hashtable]$Extensions = @{}, # Receives $extensions from powertool.ps1
-        [string]$Module # New parameter to filter by module
+        [string]$Module, # New parameter to filter by module
+        [int]$Page = 1 # Page number for pagination
     )
 
     if (-not $AllCommandData) {
@@ -289,108 +290,259 @@ function Show-Help {
             Write-Host ""
         }
 
-        # Define module display order (Help first, then others alphabetically)
-        $moduleOrder = @("Help") + ($moduleGroups.Keys | Where-Object { $_ -ne "Help" } | Sort-Object)
+        # Show with pagination
+        Show-PaginatedHelp -ModuleGroups $moduleGroups -ExtensionGroups $extensionGroups -AllCommandData $AllCommandData -Extensions $Extensions -Page $Page
+    }
+}
 
-        $isFirstGroup = $true
+function Show-PaginatedHelp {
+    param(
+        [hashtable]$ModuleGroups,
+        [hashtable]$ExtensionGroups,
+        [hashtable]$AllCommandData,
+        [hashtable]$Extensions,
+        [int]$Page = 1
+    )
 
-        # Display core modules first
-        foreach ($moduleName in $moduleOrder) {
-            if (-not $moduleGroups.ContainsKey($moduleName)) { continue }
+    # Dynamically calculate max lines per page based on terminal height
+    $terminalHeight = $Host.UI.RawUI.WindowSize.Height
+    # Reserve space for: header (3 lines), usage (3 lines), "Commands:" (2 lines), pagination footer (4 lines)
+    # This leaves room for dynamic content while ensuring pagination controls are visible
+    $reservedLines = 12
+    $maxLinesPerPage = [Math]::Max(($terminalHeight - $reservedLines), 10)  # Minimum of 10 lines for content
 
-            # Add spacing between groups (except before the first one)
-            if (-not $isFirstGroup) {
-                Write-Host ""
+    # Calculate module sizes and create page groups
+    $moduleOrder = @("Help") + ($ModuleGroups.Keys | Where-Object { $_ -ne "Help" } | Sort-Object)
+    $extensionOrder = $ExtensionGroups.Keys | Sort-Object
+
+    $pageGroups = @()
+    $currentPageModules = @()
+    $currentPageExtensions = @()
+    $currentPageLines = 0
+
+    # Process core modules
+    foreach ($moduleName in $moduleOrder) {
+        if (-not $ModuleGroups.ContainsKey($moduleName)) { continue }
+
+        $moduleSize = Get-ModuleDisplaySize -ModuleName $moduleName -Commands $ModuleGroups[$moduleName] -AllCommandData $AllCommandData -IsExtension $false
+
+        # If adding this module would exceed page limit and we already have content, start new page
+        if ($currentPageLines + $moduleSize -gt $maxLinesPerPage -and ($currentPageModules.Count -gt 0 -or $currentPageExtensions.Count -gt 0)) {
+            $pageGroups += @{
+                Modules = $currentPageModules
+                Extensions = $currentPageExtensions
             }
-            $isFirstGroup = $false
-
-            # Display module header
-            Write-Host "  ${moduleName}:" -ForegroundColor Magenta
-
-            # Sort commands within each module by Position first, then alphabetically
-            $commandsInModule = $moduleGroups[$moduleName]
-            $sortedCommands = $commandsInModule | Sort-Object {
-                $cmd = $AllCommandData[$_]
-                # Primary sort key: Position (if exists), otherwise use a high number to sort last
-                $position = if ($cmd.ContainsKey('Position') -and $null -ne $cmd.Position) {
-                    [int]$cmd.Position
-                } else {
-                    999999
-                }
-                return $position
-            }, {
-                # Secondary sort key: Command name (alphabetical)
-                $_
-            }
-
-            foreach ($commandNameKey in $sortedCommands) {
-                $command = $AllCommandData[$commandNameKey]
-                $shortcutsText = if ($command.Aliases) { " (" + ($command.Aliases -join ', ') + ")" } else { "" }
-                Write-Host "    " -NoNewline
-                Write-Host $commandNameKey -NoNewline -ForegroundColor Cyan
-                Write-Host $shortcutsText -NoNewline -ForegroundColor Yellow
-                $paddingLength = 23 - ($commandNameKey.Length + $shortcutsText.Length)
-                if ($paddingLength -gt 0) {
-                    Write-Host (" " * $paddingLength) -NoNewline
-                } else {
-                    Write-Host " " -NoNewline
-                }
-                Write-Host $command.Summary -ForegroundColor White
-                Write-Host "      Options: " -NoNewline -ForegroundColor White
-                Write-ColoredOptions -OptionsData $command.Options
-            }
+            $currentPageModules = @()
+            $currentPageExtensions = @()
+            $currentPageLines = 0
         }
 
-        # Display extensions
-        $sortedExtensions = $extensionGroups.Keys | Sort-Object
-        foreach ($extensionName in $sortedExtensions) {
-            # Add spacing between groups
-            if (-not $isFirstGroup) {
-                Write-Host ""
-            }
-            $isFirstGroup = $false
+        $currentPageModules += $moduleName
+        $currentPageLines += $moduleSize
+    }
 
-            # Display extension header with version
-            $extensionVersion = if ($Extensions.ContainsKey($extensionName)) {
-                "v$($Extensions[$extensionName].Version)"
+    # Process extensions
+    foreach ($extensionName in $extensionOrder) {
+        $extensionSize = Get-ModuleDisplaySize -ModuleName $extensionName -Commands $ExtensionGroups[$extensionName] -AllCommandData $AllCommandData -IsExtension $true -Extensions $Extensions
+
+        # If adding this extension would exceed page limit and we already have content, start new page
+        if ($currentPageLines + $extensionSize -gt $maxLinesPerPage -and ($currentPageModules.Count -gt 0 -or $currentPageExtensions.Count -gt 0)) {
+            $pageGroups += @{
+                Modules = $currentPageModules
+                Extensions = $currentPageExtensions
+            }
+            $currentPageModules = @()
+            $currentPageExtensions = @()
+            $currentPageLines = 0
+        }
+
+        $currentPageExtensions += $extensionName
+        $currentPageLines += $extensionSize
+    }
+
+    # Add final page if it has content
+    if ($currentPageModules.Count -gt 0 -or $currentPageExtensions.Count -gt 0) {
+        $pageGroups += @{
+            Modules = $currentPageModules
+            Extensions = $currentPageExtensions
+        }
+    }
+
+    $totalPages = $pageGroups.Count
+
+    # Validate page number
+    if ($Page -lt 1) {
+        $Page = 1
+    } elseif ($Page -gt $totalPages) {
+        $Page = $totalPages
+    }
+
+    # If no pagination needed (single page), show without page info
+    if ($totalPages -le 1) {
+        Show-ModuleGroups -ModuleGroups $ModuleGroups -ExtensionGroups $ExtensionGroups -AllCommandData $AllCommandData -Extensions $Extensions
+        return
+    }
+
+    # Show the requested page
+    $pageIndex = $Page - 1
+
+    # Show current page content
+    $currentModuleGroups = @{
+    }
+    $currentExtensionGroups = @{
+    }
+
+    foreach ($moduleName in $pageGroups[$pageIndex].Modules) {
+        $currentModuleGroups[$moduleName] = $ModuleGroups[$moduleName]
+    }
+
+    foreach ($extensionName in $pageGroups[$pageIndex].Extensions) {
+        $currentExtensionGroups[$extensionName] = $ExtensionGroups[$extensionName]
+    }
+
+    Show-ModuleGroups -ModuleGroups $currentModuleGroups -ExtensionGroups $currentExtensionGroups -AllCommandData $AllCommandData -Extensions $Extensions
+
+    # Show pagination info
+    Write-Host ""
+    Write-Separator -ForegroundColor DarkGray
+    Write-Host "Page $Page of $totalPages" -ForegroundColor Cyan -NoNewline
+    Write-Host " | Terminal: $terminalHeight lines, Content: $maxLinesPerPage lines" -ForegroundColor DarkGray -NoNewline
+    if ($Page -lt $totalPages) {
+        Write-Host " | Next: " -ForegroundColor DarkGray -NoNewline
+        Write-Host "powertool help -Page $($Page + 1)" -ForegroundColor Yellow
+    } else {
+        Write-Host ""
+    }
+    Write-Separator -ForegroundColor DarkGray
+}
+
+function Get-ModuleDisplaySize {
+    param(
+        [string]$ModuleName,
+        [array]$Commands,
+        [hashtable]$AllCommandData,
+        [bool]$IsExtension = $false,
+        [hashtable]$Extensions = @{
+        }
+    )
+
+    # Module header line + spacing
+    $lines = 2
+
+    # Each command takes 2 lines (command line + options line)
+    $lines += $Commands.Count * 2
+
+    return $lines
+}
+
+function Show-ModuleGroups {
+    param(
+        [hashtable]$ModuleGroups,
+        [hashtable]$ExtensionGroups,
+        [hashtable]$AllCommandData,
+        [hashtable]$Extensions
+    )
+
+    # Define module display order (Help first, then others alphabetically)
+    $moduleOrder = @("Help") + ($ModuleGroups.Keys | Where-Object { $_ -ne "Help" } | Sort-Object)
+    $isFirstGroup = $true
+
+    # Display core modules first
+    foreach ($moduleName in $moduleOrder) {
+        if (-not $ModuleGroups.ContainsKey($moduleName)) { continue }
+
+        # Add spacing between groups (except before the first one)
+        if (-not $isFirstGroup) {
+            Write-Host ""
+        }
+        $isFirstGroup = $false
+
+        # Display module header
+        Write-Host "  ${moduleName}:" -ForegroundColor Magenta
+
+        # Sort commands within each module by Position first, then alphabetically
+        $commandsInModule = $ModuleGroups[$moduleName]
+        $sortedCommands = $commandsInModule | Sort-Object {
+            $cmd = $AllCommandData[$_]
+            # Primary sort key: Position (if exists), otherwise use a high number to sort last
+            $position = if ($cmd.ContainsKey('Position') -and $null -ne $cmd.Position) {
+                [int]$cmd.Position
             } else {
-                ""
+                999999
             }
-            Write-Host "  ${extensionName} " -NoNewline -ForegroundColor DarkMagenta
-            Write-Host "(${extensionVersion}):" -ForegroundColor DarkGray
+            return $position
+        }, {
+            # Secondary sort key: Command name (alphabetical)
+            $_
+        }
 
-            # Sort commands within each extension by Position first, then alphabetically
-            $commandsInExtension = $extensionGroups[$extensionName]
-            $sortedCommands = $commandsInExtension | Sort-Object {
-                $cmd = $AllCommandData[$_]
-                # Primary sort key: Position (if exists), otherwise use a high number to sort last
-                $position = if ($cmd.ContainsKey('Position') -and $null -ne $cmd.Position) {
-                    [int]$cmd.Position
-                } else {
-                    999999
-                }
-                return $position
-            }, {
-                # Secondary sort key: Command name (alphabetical)
-                $_
+        foreach ($commandNameKey in $sortedCommands) {
+            $command = $AllCommandData[$commandNameKey]
+            $shortcutsText = if ($command.Aliases) { " (" + ($command.Aliases -join ', ') + ")" } else { "" }
+            Write-Host "    " -NoNewline
+            Write-Host $commandNameKey -NoNewline -ForegroundColor Cyan
+            Write-Host $shortcutsText -NoNewline -ForegroundColor Yellow
+            $paddingLength = 23 - ($commandNameKey.Length + $shortcutsText.Length)
+            if ($paddingLength -gt 0) {
+                Write-Host (" " * $paddingLength) -NoNewline
+            } else {
+                Write-Host " " -NoNewline
             }
+            Write-Host $command.Summary -ForegroundColor White
+            Write-Host "      Options: " -NoNewline -ForegroundColor White
+            Write-ColoredOptions -OptionsData $command.Options
+        }
+    }
 
-            foreach ($commandNameKey in $sortedCommands) {
-                $command = $AllCommandData[$commandNameKey]
-                $shortcutsText = if ($command.Aliases) { " (" + ($command.Aliases -join ', ') + ")" } else { "" }
-                Write-Host "    " -NoNewline
-                Write-Host $commandNameKey -NoNewline -ForegroundColor Cyan
-                Write-Host $shortcutsText -NoNewline -ForegroundColor Yellow
-                $paddingLength = 23 - ($commandNameKey.Length + $shortcutsText.Length)
-                if ($paddingLength -gt 0) {
-                    Write-Host (" " * $paddingLength) -NoNewline
-                } else {
-                    Write-Host " " -NoNewline
-                }
-                Write-Host $command.Summary -ForegroundColor White
-                Write-Host "      Options: " -NoNewline -ForegroundColor White
-                Write-ColoredOptions -OptionsData $command.Options
+    # Display extensions
+    $sortedExtensions = $ExtensionGroups.Keys | Sort-Object
+    foreach ($extensionName in $sortedExtensions) {
+        # Add spacing between groups
+        if (-not $isFirstGroup) {
+            Write-Host ""
+        }
+        $isFirstGroup = $false
+
+        # Display extension header with version
+        $extensionVersion = if ($Extensions.ContainsKey($extensionName)) {
+            "v$($Extensions[$extensionName].Version)"
+        } else {
+            ""
+        }
+        Write-Host "  ${extensionName} " -NoNewline -ForegroundColor DarkMagenta
+        Write-Host "(${extensionVersion}):" -ForegroundColor DarkGray
+
+        # Sort commands within each extension by Position first, then alphabetically
+        $commandsInExtension = $ExtensionGroups[$extensionName]
+        $sortedCommands = $commandsInExtension | Sort-Object {
+            $cmd = $AllCommandData[$_]
+            # Primary sort key: Position (if exists), otherwise use a high number to sort last
+            $position = if ($cmd.ContainsKey('Position') -and $null -ne $cmd.Position) {
+                [int]$cmd.Position
+            } else {
+                999999
             }
+            return $position
+        }, {
+            # Secondary sort key: Command name (alphabetical)
+            $_
+        }
+
+        foreach ($commandNameKey in $sortedCommands) {
+            $command = $AllCommandData[$commandNameKey]
+            $shortcutsText = if ($command.Aliases) { " (" + ($command.Aliases -join ', ') + ")" } else { "" }
+            Write-Host "    " -NoNewline
+            Write-Host $commandNameKey -NoNewline -ForegroundColor Cyan
+            Write-Host $shortcutsText -NoNewline -ForegroundColor Yellow
+            $paddingLength = 23 - ($commandNameKey.Length + $shortcutsText.Length)
+            if ($paddingLength -gt 0) {
+                Write-Host (" " * $paddingLength) -NoNewline
+            } else {
+                Write-Host " " -NoNewline
+            }
+            Write-Host $command.Summary -ForegroundColor White
+            Write-Host "      Options: " -NoNewline -ForegroundColor White
+            Write-ColoredOptions -OptionsData $command.Options
         }
     }
 }
@@ -842,7 +994,8 @@ function Test-VersionRequirement {
 function Update-Extension {
     param(
         [string]$ExtensionName,
-        [hashtable]$Extensions = @{}
+        [hashtable]$Extensions = @{
+        }
     )
 
     if (-not $ExtensionName) {
@@ -1234,20 +1387,21 @@ $script:ModuleCommands = @{
         Position = 0
         Aliases = @("h")
         Action = {
-            # $Value1 is the value of the -Value1 parameter from powertool.ps1, used as ForCommand here
-            # Use $script:commandDefinitions to access the main script's command definitions
-            Show-Help -ForCommand $Value1 -AllCommandData $script:commandDefinitions -CommandModuleMap $script:commandModuleMap -ExtensionCommands $script:extensionCommands -Extensions $script:extensions -Module $Module
+            # Use the -Page parameter directly from the main script
+            Show-Help -ForCommand $Value1 -AllCommandData $script:commandDefinitions -CommandModuleMap $script:commandModuleMap -ExtensionCommands $script:extensionCommands -Extensions $script:extensions -Module $Module -Page $Page
         }
         Summary = "Show this help message or help for a specific command."
         Options = @{
             0 = @(
                 @{ Token = "command-name"; Type = "OptionalArgument"; Description = "The name of the command to get help for." }
                 @{ Token = "Module"; Type = "OptionalParameter"; Description = "Show only commands from the specified module or extension." }
+                @{ Token = "Page"; Type = "OptionalParameter"; Description = "Page number for paginated help display." }
             )
         }
         Examples = @(
+            "powertool help",
+            "powertool help -Page 2",
             "powertool help rename-random",
-            "powertool help filter-images",
             "powertool help -Module Help",
             "powertool help -Module ImageProcessing"
         )

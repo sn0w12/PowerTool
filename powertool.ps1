@@ -19,7 +19,9 @@ param (
     [switch]$CaseSensitive,
     [switch]$Update,
     [switch]$Force,
-    [switch]$Nightly
+    [switch]$Nightly,
+    [Parameter(ValueFromRemainingArguments=$true)]
+    [object[]]$RemainingArgs
 )
 
 $script:version = "0.1.0"
@@ -34,6 +36,22 @@ if (Test-Path $modulesPath) {
     Write-Warning "Modules directory not found: $modulesPath"
 }
 
+function Get-ExtraParams {
+    param([object[]]$InputArgs)
+    $result = @{}
+    for ($i = 0; $i -lt $InputArgs.Count; $i++) {
+        $item = $InputArgs[$i]
+        if ($item -is [string] -and $item.StartsWith('-')) {
+            $key = $item.TrimStart('-')
+            $next = if ($i + 1 -lt $InputArgs.Count -and ($InputArgs[$i + 1] -isnot [string] -or -not $InputArgs[$i + 1].StartsWith('-'))) { $InputArgs[$i + 1] } else { $true }
+            $result[$key] = $next
+            if ($next -ne $true) { $i++ }
+        }
+    }
+    return $result
+}
+
+$script:ExtraParams = Get-ExtraParams $RemainingArgs
 $script:commandDefinitions = @{}
 $script:commandModuleMap = @{}
 $script:extensions = @{}

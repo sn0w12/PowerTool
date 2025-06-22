@@ -1502,4 +1502,4 @@ $script:ModuleCommands = @{
     }
 }
 
-Export-ModuleMember -Function Show-Help, Write-ColoredOptions, Write-ColoredExample, Show-Version, Search-Commands, Test-ModuleCommands, Test-VersionRequirement, Update-PowerTool, Get-LatestVersion -Variable ModuleCommands
+Export-ModuleMember -Function Show-Help, Write-ColoredOptions, Write-ColoredExample, Show-Version, Search-Commands, Test-ModuleCommands, Test-VersionRequirement, Update-PowerTool, Get-LatestVersion, Write-Header -Variable ModuleCommands

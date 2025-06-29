@@ -1413,8 +1413,8 @@ $script:ModuleCommands = @{
         Aliases = @("rr")
         Action = {
             $targetPath = Get-TargetPath $Value1
-            $useRecursive = $PSBoundParameters.ContainsKey('Recursive') -and $Recursive
-            Rename-FilesRandomly -dir $targetPath -recursive $useRecursive
+            write-host "Renaming files in '$targetPath' recursively: $Recursive"
+            Rename-FilesRandomly -dir $targetPath -recursive $Recursive
         }
         Summary = "Rename all files in a folder with random names."
         Options = @{
